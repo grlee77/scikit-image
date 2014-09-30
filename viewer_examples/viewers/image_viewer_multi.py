@@ -611,9 +611,13 @@ class CustomPlugin(Plugin):
         filtered_filename = self.image_filter(*arguments, **kwargs)
 
         filtered_vol = nib.load(filtered_filename).get_data().transpose(2,1,0) #HARDCODED TRANSPOSE FOR NOW
-        self.image_viewer.volume_list[self.active_image_index] = filtered_vol
-        self.image_viewer.image_list[self.image_viewer.active_image_index] = self.image_viewer.volume_list[...,self.image_viewer.frame_list[self.image_viewer.active_image_index]]
-        self.display_filtered_image(self.image_viewer.image_list[self.image_viewer.active_image_index])
+
+        vlist = self.image_viewer.volume_list
+        imlist = self.image_viewer.image_list
+        ai = self.image_viewer.active_image_index
+        vlist[ai] = filtered_vol
+        imlist[ai] = vlist[...,self.image_viewer.frame_list[ai]]
+        self.display_filtered_image(imlist[ai])
         self.image_changed.emit(filtered)
 
 if False:
