@@ -558,7 +558,7 @@ class ImageViewer(QtGui.QMainWindow):
         pass
 
 
-
+import nibabel as nib
 class CustomPlugin(Plugin):
     """ Kludge to substitute a different argument instead of 
     image_viewer.original_image as the first argument to the filter 
@@ -566,6 +566,7 @@ class CustomPlugin(Plugin):
     def __init__(self, first_argument_to_filter=None, **kwargs):
         super(CustomPlugin, self).__init__(**kwargs)
         self.first_argument_to_filter = first_argument_to_filter
+    
     def attach(self, image_viewer):
         """Attach the plugin to an ImageViewer.
 
@@ -594,6 +595,26 @@ class CustomPlugin(Plugin):
         print("********************************")
         self.filter_image()
 
+    def filter_image(self, *widget_arg):
+        """Call `image_filter` with widget args and kwargs
+
+        Note: `display_filtered_image` is automatically called.
+        """
+        # `widget_arg` is passed by the active widget but is unused since all
+        # filter arguments are pulled directly from attached the widgets.
+
+        if self.image_filter is None:
+            return
+        arguments = [self._get_value(a) for a in self.arguments]
+        kwargs = dict([(name, self._get_value(a))
+                       for name, a in self.keyword_arguments.items()])
+        filtered_filename = self.image_filter(*arguments, **kwargs)
+
+        filtered_vol = nib.load(filtered_filename).get_data().transpose(2,1,0) #HARDCODED TRANSPOSE FOR NOW
+        self.image_viewer.volume_list[self.active_image_index] = filtered_vol
+        self.image_viewer.image_list[self.image_viewer.active_image_index] = self.image_viewer.volume_list[...,self.image_viewer.frame_list[self.image_viewer.active_image_index]]
+        self.display_filtered_image(self.image_viewer.image_list[self.image_viewer.active_image_index])
+        self.image_changed.emit(filtered)
 
 if False:
 	image = data.camera()
@@ -618,7 +639,7 @@ elif False:
 	voldata = img_as_float(voldata)
 	voldata = voldata[:,::-1,::-1]
 	viewer = ImageViewer(voldata.transpose([2,1,0]), image_labels=['Axial','Coronal','Sagittal'], ortho_viewer=True)
-elif False:
+elif True:
     from skimage.filter.rank import median
     from skimage.morphology import disk
 
@@ -636,11 +657,11 @@ elif False:
     
     viewer += plugin
     viewer.show()
-else:
+elif False:
     from skimage.viewer.widgets import OKCancelButtons, SaveButtons, CheckBox
 
     import nibabel as nib
-    nii_file = '/media/Data1/c-mind-data-copy/IRC04H_06M008/IRC04H_06M008_P_1_WIP_T1W_3D_IRCstandard32_SENSE_4_1.nii.gz'
+    nii_file = '/media/Data1/c-mind-data-copy/UCLA_03F003/UCLA_03F003_P_1_T1W_3D_MPRAGE_2_1.nii.gz'
     input_nii = nib.load(nii_file)
     voldata = input_nii.get_data().astype(np.float64)
     voldata = voldata/voldata.max()
@@ -650,7 +671,10 @@ else:
     viewer = ImageViewer([voldata, voldata.copy()], image_labels=['Original', 'Defaced'], ortho_viewer=False)
 
     from cmind.pipeline.cmind_deface import cmind_deface
-    defacer = partial(cmind_deface, output_nii = nii_file.replace('nii.gz','_defaced_GUI.nii.gz'))
+    defacer = partial(cmind_deface, output_nii = nii_file.replace('.nii.gz','_defaced_GUI.nii.gz'))
+
+#[('IRC04H_02F003', 'P', 1), ('UCLA_03F003', 'P', 1), ('UCLA_03M003', 'P', 1), ('UCLA_07F002', 'P', 1), ('UCLA_07F003', 'P', 1), ('UCLA_07M006', 'P', 1), ('UCLA_08F002', 'P', 1), ('UCLA_08F006', 'P', 1), ('UCLA_08F008', 'P', 1), ('UCLA_08F009', 'P', 1), ('UCLA_08F010', 'P', 1), ('UCLA_08M002', 'P', 1), ('UCLA_08M004', 'P', 1), ('UCLA_09F004', 'P', 1), ('UCLA_09F005', 'P', 1), ('UCLA_09F006', 'P', 1), ('UCLA_09F007', 'P', 1), ('UCLA_09F009', 'P', 1), ('UCLA_09F010', 'P', 1), ('UCLA_09F011', 'P', 1), ('UCLA_09M002', 'P', 1), ('UCLA_09M004', 'P', 1), ('UCLA_09M005', 'P', 1)]
+
 
     plugin = CustomPlugin(image_filter=defacer, first_argument_to_filter=nii_file) # doctest: +SKIP
     plugin += Slider('age_months', 0, 2000, value = 252, value_type='int')
