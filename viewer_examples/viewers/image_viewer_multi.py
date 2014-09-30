@@ -112,21 +112,21 @@ class ImageViewer(QtGui.QMainWindow):
             #from copy import deepcopy
             nviews = len(image)
             if (image[0].ndim == 2) or ((image[0].ndim ==3) and _is_color(image[0])):
-                self.image_list = image
-                #self.volume_list = self.image_list
+                self.images = image
+                #self.volumes = self.images
                 self.data_is_3D = False
-            else:  #use separate volume_list to retain full 3D volumes
+            else:  #use separate volumes to retain full 3D volumes
                 self.data_is_3D = True
-                self.volume_list = image  
-                self.image_list = []
-                self.frame_list = []
-                for vol in self.volume_list:
+                self.volumes = image  
+                self.images = []
+                self.current_frames = []
+                for vol in self.volumes:
                     nimg = vol.shape[-1]
                     frame = int(np.floor(nimg/2.))-1
                     frame = max(frame,0)
-                    self.frame_list.append(frame)
-                    self.image_list.append(vol[...,frame])
-            image = self.image_list[0]
+                    self.current_frames.append(frame)
+                    self.images.append(vol[...,frame])
+            image = self.images[0]
         else:
             if ortho_viewer:
                 if not (image.ndim - _is_color(image)) == 3:
@@ -134,40 +134,41 @@ class ImageViewer(QtGui.QMainWindow):
 
             if (image.ndim == 2) or ((image.ndim ==3) and _is_color(image)):
                 self.data_is_3D = False
-                self.image_list = [image,]
+                self.images = [image,]
             else:
                 self.data_is_3D = True
                 if ortho_viewer:
 	                nviews = 3
 	                mid_frames = np.floor(np.asarray(image.shape)/2.)-1
 	                mid_frames = np.maximum(mid_frames,[0,0,0]).astype(np.intp)
-	                self.frame_list = list(mid_frames)
-	                self.image_list = [image[mid_frames[0],:,:], 
+	                self.current_frames = list(mid_frames)
+	                self.images = [image[mid_frames[0],:,:], 
 	                				   image[:,mid_frames[1],:], 
 	                				   image[:,:,mid_frames[2]]]
-                	self.volume_list = [image, image, image]
+                	self.volumes = [image, image, image]
                 else:
 	                nimg = image.shape[-1]
 	                frame = int(np.floor(nimg/2.))-1
 	                frame = max(frame,0)
-	                self.frame_list = [frame, ]
-	                self.image_list = [image[...,frame],]
-                	self.volume_list = [image,]
-                image = self.image_list[0]
+	                self.current_frames = [frame, ]
+	                self.images = [image[...,frame],]
+                	self.volumes = [image,]
+                image = self.images[0]
 
+        self.image_labels = image_labels
 #        if image_labels is not None:
-#            if len(image_labels) != len(self.image_list)
+#            if len(image_labels) != len(self.images)
 #                raise ValueError("")
         #active image control which panel any attached plugins will operate upon
         if active_image_index > nviews:
             raise ValueError("active_image cannot exceed the number of images in image list")
         else:
         	self.active_image_index = active_image_index
-        	active_image = self.image_list[active_image_index]
+        	active_image = self.images[active_image_index]
 
         ndims_list = []
         self.is_color = []
-        for tmp in self.image_list:
+        for tmp in self.images:
         	ndim = tmp.ndim
         	#RGB or RGBA: treat as ndim-1
         	if _is_color(tmp): 
@@ -182,30 +183,22 @@ class ImageViewer(QtGui.QMainWindow):
         if len(set(ndims_list)) > 1:
         	raise ValueError("all images in list must have the same number of dimensions")
 
-        self.fig, self.ax = utils.figimage(image)
-        self.canvas = self.fig.canvas
-        self.canvas.setParent(self)
-        self.ax.autoscale(enable=False)
-
         self._tool_lists = []
-        self._tool_lists.append([])
-        self._tools = self._tool_lists[0]
+        
         
         self.useblit = useblit
-        if useblit:
-            self._blit_manager = BlitManager(self.ax)
-            self._blit_managers = [self._blit_manager, ]
 
-        self._event_manager = EventManager(self.ax)
-
-        self._image_plot = self.ax.images[0]
-
-        self.figures = [self.fig,]
-        self.axes = [self.ax,]
-        self.canvases = [self.canvas,]
-        self._image_plots = [self._image_plot,]
-        self._event_managers = [EventManager(self.ax), ]
-
+        self.figures = []
+        self.axes = []
+        self.canvases = []
+        self._image_plots = []
+        self._event_managers = []
+        self._labels = []
+        self.slider_list = []       
+        self.sub_layouts = []
+        if self.useblit:
+            self._blit_managers = []
+        
         self.plugins = []
 
         self.layout = QtGui.QVBoxLayout(self.main_widget)
@@ -214,148 +207,36 @@ class ImageViewer(QtGui.QMainWindow):
         self.status_message = status_bar.showMessage
         sb_size = status_bar.sizeHint()
 
-        cs_size = self.canvas.sizeHint()        
-        if nviews == 1:
-            self.layout.addWidget(self.canvas)
-            self.resize(cs_size.width(), cs_size.height() + sb_size.height())
-        else:
-            self.fig_layout = QtGui.QHBoxLayout(self.main_widget)
+        self.fig_layout = QtGui.QHBoxLayout(self.main_widget)
 
-            #self.fig_layout.addWidget(self.canvas)
-            sub_layout = QtGui.QVBoxLayout(self.main_widget)
-            
-            if image_labels is not None:
-            	_label = QtGui.QLabel()
-            	_label.setText(image_labels[0])
-            	_label.setAlignment(QtCore.Qt.AlignCenter)
-            	label_height = _label.sizeHint().height()
-            	sub_layout.addWidget(_label)
-            else:
-            	label_height = 0
-            sub_layout.addWidget(self.canvas)
+        canvas_heights = []
+        canvas_widths = []
 
-            self.slider_list = []
-            if self.data_is_3D:
-            	num_images = self.volume_list[0].shape[-1]
-                slider_kws = dict(value=self.frame_list[0], low=0, high=num_images - 1)
-                slider_kws['update_on'] = 'move'
-                slider_kws['orientation'] = 'horizontal'
-                if ortho_viewer:
-                    slice_axis = 0
+        for v in range(nviews):
+            cs_height, other_height, w = self.generate_figlayout(frame=v, 
+                                                                 ortho_viewer=ortho_viewer, 
+                                                                 add_slider = True)
+            canvas_heights.append(cs_height) #sub_layout_height)
+            canvas_widths.append(w)
 
-                    if False: #testing overlaying lines
-	                    line_props = None
-	                    props = dict(color='r', linewidth=1, alpha=0.4) #, solid_capstyle='butt')
-	                    props.update(line_props if line_props is not None else {})
-	                    x = (0, self.volume_list[1].shape[1])
-	                    y = (self.frame_list[1] + 0.5, self.frame_list[1] + 0.5)
-	                    self.lines = []
-	                    #self.artists = []
-	                    line = lines.Line2D(x, y, visible=True, animated=False, **props)
-	                    self.lines.append(line)
+        self._update_original_image(active_image)
 
-	                    y2 = (0, self.volume_list[2].shape[1])
-	                    x2 = (self.frame_list[2] + 0.5, self.frame_list[2] + 0.5)
-	                    line2 = lines.Line2D(x2, y2, visible=True, animated=False, **props)
-	                    #self.lines.append(line2)
+        self.layout.addLayout(self.fig_layout)
 
+        #will use largest height as the figure height
+        canvas_heights = np.asarray(canvas_heights)
+        relative_heights = canvas_heights/float(canvas_heights.max())
+        #scale up widths accordingly
+        canvas_widths = np.asarray(canvas_widths)/relative_heights
+        #round widths to integer number of pixels
+        canvas_widths = np.round(canvas_widths).astype(np.intp)
 
-	                    self.axes[0].add_line(line)
-	                    self.axes[0].add_line(line2)
-                    #self.artists.append(self._line)
-                else:
-                	slice_axis = -1
-                slider_kws['callback'] = partial(self.update_index, i=0, axis=slice_axis)
-                slider_kws['value_type'] = 'int'
-                slider = Slider('frame', **slider_kws)
-                sub_layout.addWidget(slider)
-                self.slider_list.append(slider)
-                slider_height = slider.sizeHint().height()
-            else:
-            	slider_height = 0
+#        self.layout.addLayout(self.fig_layout)
+        self.resize(canvas_widths.sum(), canvas_heights.max() + 
+                                         other_height + 
+                                         sb_size.height())
 
-            self.sub_layouts = [sub_layout,]
-
-            self.fig_layout.addLayout(sub_layout)
-
-            cs_height = cs_size.height()
-            cs_width = cs_size.width()
-            canvas_heights = [cs_height,]
-            canvas_widths = [cs_width,]
-            for v in range(1,nviews):
-                if v<len(self.image_list):
-                    fig, ax = utils.figimage(self.image_list[v])
-                else:
-                    fig, ax = utils.figimage(np.zeros_like(self.image_list[-1]))
-                canvas = fig.canvas
-                canvas.setParent(self)
-                ax.autoscale(enable=False)
-
-                self.figures.append(fig)
-                self.axes.append(ax)
-                self.canvases.append(canvas)
-
-                sub_layout = QtGui.QVBoxLayout(self.main_widget)
-
-                if (image_labels is not None): # and (v < len(image_labels)):
-                    if v < len(image_labels):
-                        label_text = image_labels[v]
-                    else:
-                        label_text = ''
-                    _label = QtGui.QLabel()
-                    _label.setText(label_text)
-                    _label.setAlignment(QtCore.Qt.AlignCenter)
-                    sub_layout.addWidget(_label)
-                sub_layout.addWidget(canvas)
-                if self.data_is_3D:
-                    num_images = self.volume_list[v].shape[-1]
-                    slider_kws['value'] = self.frame_list[v]
-                    slider_kws['high'] = num_images - 1
-                    if ortho_viewer:
-                	    slice_axis = v
-                    else:
-                	    slice_axis = -1
-                    slider_kws['callback'] = partial(self.update_index, i=v, axis=slice_axis)
-                    slider = Slider('frame', **slider_kws)
-                    sub_layout.addWidget(slider)
-                    self.slider_list.append(slider)
-
-                #self.fig_layout.addWidget(canvas)
-                self.fig_layout.addLayout(sub_layout)
-                self.sub_layouts.append(sub_layout)
-
-                if useblit:
-                    self._blit_managers.append(BlitManager(ax))
-                self._event_managers.append(EventManager(ax))
-                self._image_plots.append(ax.images[0])
-                cs_size = canvas.sizeHint()
-                #cs_height = max(cs_height,cs_size.height())
-                #cs_width += cs_size.width()
-                sub_layout_height = cs_size.height()
-
-                canvas_heights.append(cs_size.height()) #sub_layout_height)
-                canvas_widths.append(cs_size.width())
-
-                self._tool_lists.append([])
-                self.connect_event('motion_notify_event', self._update_status_bar, i=v)
-
-            self._update_original_image(active_image)
-
-            #will use largest height as the figure height
-            canvas_heights = np.asarray(canvas_heights)
-            relative_heights = canvas_heights/float(canvas_heights.max())
-            #scale up widths accordingly
-            canvas_widths = np.asarray(canvas_widths)/relative_heights
-            #round widths to integer number of pixels
-            canvas_widths = np.round(canvas_widths).astype(np.intp)
-
-            self.layout.addLayout(self.fig_layout)
-            self.resize(canvas_widths.sum(), canvas_heights.max() + 
-                                             label_height + 
-                                             slider_height + 
-                                             sb_size.height())
-
-        self.connect_event('motion_notify_event', self._update_status_bar, i=0)
+        #self.connect_event('motion_notify_event', self._update_status_bar, i=0)
 
     def __add__(self, plugin):
         """Add plugin to ImageViewer"""
@@ -471,9 +352,9 @@ class ImageViewer(QtGui.QMainWindow):
 
     def set_image(self, image, i=0):
     	"""image setter for any of the images in the list"""
-    	if i>len(self.image_list):
+    	if i>len(self.images):
     		raise ValueError("Invalid Index")
-    	self.image_list[i] = image
+    	self.images[i] = image
         #self._img = image
         utils.update_axes_image(self._image_plots[i], image)
 
@@ -528,34 +409,130 @@ class ImageViewer(QtGui.QMainWindow):
         x = int(x + 0.5)
         y = int(y + 0.5)
         try:
-            return "%4s @ [%4s, %4s]" % (self.image_list[i][y, x], x, y)
+            return "%4s @ [%4s, %4s]" % (self.images[i][y, x], x, y)
         except IndexError:
             return ""
 
     def update_index(self, name, index, i, axis):
         index = int(round(index))
 
-        if index == self.frame_list[i]:
+        if index == self.current_frames[i]:
             return
 
         # clip index value to collection limits
-        num_images = self.volume_list[i].shape[axis]
+        num_images = self.volumes[i].shape[axis]
         index = max(index, 0)
         index = min(index, num_images - 1)
 
-        self.frame_list[i] = index
+        self.current_frames[i] = index
         self.slider_list[i].val = index
         if (axis == -1) or (axis == 2):
-        	self.set_image(self.volume_list[i][...,index], i=i)
+        	self.set_image(self.volumes[i][...,index], i=i)
         elif (axis == 0):
-        	self.set_image(self.volume_list[i][index,...], i=i)
+        	self.set_image(self.volumes[i][index,...], i=i)
         elif (axis == 1):
-        	self.set_image(self.volume_list[i][:,index,...], i=i)
+        	self.set_image(self.volumes[i][:,index,...], i=i)
         elif (axis == 2):
-        	self.set_image(self.volume_list[i][:,:,index,...], i=i)
+        	self.set_image(self.volumes[i][:,:,index,...], i=i)
         else:
         	raise ValueError("unsupported axis")
         pass
+
+    def generate_figlayout(self, frame=0, ortho_viewer = False, add_slider=True):
+
+        sub_layout = QtGui.QVBoxLayout(self.main_widget)
+
+        if frame<len(self.images):
+            fig, ax = utils.figimage(self.images[frame])
+        else:
+            fig, ax = utils.figimage(np.zeros_like(self.images[-1]))
+
+        canvas = fig.canvas
+        canvas.setParent(self)
+        ax.autoscale(enable=False)
+
+        cs_size = canvas.sizeHint()
+
+        self.figures.append(fig)
+        self.axes.append(ax)
+        self.canvases.append(canvas)
+        self._image_plots.append(ax.images[0])
+        self._event_managers.append(EventManager(ax))
+        if self.useblit:
+            self._blit_managers.append(BlitManager(ax))
+
+        if self.image_labels is not None:
+            label = QtGui.QLabel()
+            label.setText(self.image_labels[frame])
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            self._labels.append(label)
+            label_height = label.sizeHint().height()
+            sub_layout.addWidget(label)
+        else:
+            label_height = 0
+        sub_layout.addWidget(canvas)
+
+        if self.data_is_3D:
+            num_images = self.volumes[frame].shape[-1]
+            if ortho_viewer:
+                if False: #testing overlaying lines
+                    frame_list = [0,1,2]
+                    other_frames = frame_list.remove(frame)                    
+                    line_props = None
+                    props = dict(color='r', linewidth=1, alpha=0.4) #, solid_capstyle='butt')
+                    props.update(line_props if line_props is not None else {})
+                    x = (0, self.volumes[other_frames[0]].shape[1])
+                    y = (self.current_frames[other_frames[0]] + 0.5, self.current_frames[other_frames[0]] + 0.5)
+                    self.lines = []
+                    #self.artists = []
+                    line = lines.Line2D(x, y, visible=True, animated=False, **props)
+                    self.lines.append(line)
+
+                    y2 = (0, self.volumes[other_frames[1]].shape[1])
+                    x2 = (self.current_frames[other_frames[1]] + 0.5, self.current_frames[other_frames[1]] + 0.5)
+                    line2 = lines.Line2D(x2, y2, visible=True, animated=False, **props)
+                    #self.lines.append(line2)
+
+                    self.axes[0].add_line(line)
+                    self.axes[0].add_line(line2)
+                #self.artists.append(self._line)
+
+            if add_slider is not None:
+                if ortho_viewer:
+                    slice_axis = 0
+                else:
+                    slice_axis = -1
+                slider_kws = {}
+                slider_kws = dict(value = self.current_frames[frame], 
+                                  low = 0, 
+                                  high = num_images - 1,
+                                  update_on = 'move',
+                                  orientation = 'horizontal',
+                                  value_type = 'int')
+                slider_kws['callback'] = partial(self.update_index, 
+                                                 i=frame, 
+                                                 axis=slice_axis)
+                slider = Slider('frame', **slider_kws)
+                sub_layout.addWidget(slider)
+                self.slider_list.append(slider)
+                slider_height = slider.sizeHint().height()
+            else:
+                slider_height = 0
+
+        else:
+            slider_height = 0
+
+        self._tool_lists.append([])
+        self.connect_event('motion_notify_event', self._update_status_bar, i=frame)
+
+        self.sub_layouts.append(sub_layout)
+        self.fig_layout.addLayout(sub_layout)
+
+        canvas_height = cs_size.height()
+        width = cs_size.width()
+        other_height = label_height + slider_height
+
+        return canvas_height, other_height, width
 
 
 import nibabel as nib
@@ -582,7 +559,8 @@ class CustomPlugin(Plugin):
         self.setWindowFlags(Qt.Dialog)
 
         self.image_viewer = image_viewer
-        self.image_viewer.plugins.append(self)
+        self.image_viewer.plugins.a
+        ppend(self)
         #TODO: Always passing image as first argument may be bad assumption.
         if self.first_argument_to_filter == None:
             self.arguments = [self.image_viewer.original_image]
@@ -612,11 +590,11 @@ class CustomPlugin(Plugin):
 
         filtered_vol = nib.load(filtered_filename).get_data().transpose(2,1,0) #HARDCODED TRANSPOSE FOR NOW
 
-        vlist = self.image_viewer.volume_list
-        imlist = self.image_viewer.image_list
+        vlist = self.image_viewer.volumes
+        imlist = self.image_viewer.images
         ai = self.image_viewer.active_image_index
         vlist[ai] = filtered_vol
-        imlist[ai] = vlist[...,self.image_viewer.frame_list[ai]]
+        imlist[ai] = vlist[...,self.image_viewer.current_frames[ai]]
         self.display_filtered_image(imlist[ai])
         self.image_changed.emit(filtered)
 
@@ -698,3 +676,37 @@ elif False:
 
 
 viewer.show()
+
+"""
+TODO: change on_move to on_release for slow denoising case
+
+TODO: add wait cursor during processing as suggested here
+http://stackoverflow.com/questions/8218900/how-can-i-change-the-cursor-shape-with-pyqt
+
+
+
+down vote
+ 
+
+ekhumoro's solution is correct. This solution is a modification for the sake of style. I used what ekhumor's did but used a python decorator.
+from PyQt4.QtCore import Qt
+from PyQt4.QtGui import QApplication, QCursor, QMainWidget
+
+def waiting_effects(function):
+    def new_function(self):
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        function(self)
+        QApplication.restoreOverrideCursor()
+    return new_function
+
+I can just put the decorator on any method I would like the spinner to be active on.
+class MyWigdet(QMainWidget):
+
+    # ...
+
+    @waiting_effects
+    def doLengthyProcess(self):
+        # do lengthy process
+        pass
+ 
+"""
