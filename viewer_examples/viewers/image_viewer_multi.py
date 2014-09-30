@@ -10,7 +10,26 @@ from skimage.viewer.plugins.base import Plugin
 from skimage.viewer.widgets import Slider
 from skimage.viewer.viewers.core import BlitManager, EventManager
 from skimage.viewer.utils import dialogs
+
+
 from functools import partial
+from matplotlib import lines
+
+# if False:  #see viewer.canvastools.linetool, etc...
+    
+# 	line_props = None
+#     props = dict(color='r', linewidth=1, alpha=0.4) #, solid_capstyle='butt')
+#     props.update(line_props if line_props is not None else {})
+#     x = (0, 0)
+#     y = (0, 0)    
+#     self.lines = []
+#     #self.artists = []
+#     line = lines.Line2D(x, y, visible=True, animated=True, **props)
+#     self.lines.append(line)
+#     self.axes[v].add_line(line)
+#     #self.artists.append(self._line)
+#     #self._line.set_data(np.transpose(pts))
+
 
 class ImageViewer(QtGui.QMainWindow):
     """Viewer for displaying images.
@@ -52,7 +71,7 @@ class ImageViewer(QtGui.QMainWindow):
     # Signal that the original image has been changed
     original_image_changed = Signal(np.ndarray)
 
-    def __init__(self, image, useblit=True, image_labels=None, ortho_viewer = False):
+    def __init__(self, image, useblit=True, image_labels=None, ortho_viewer = False, active_image_index = 0):
         # Start main loop
         utils.init_qtapp()
         super(ImageViewer, self).__init__()
@@ -136,6 +155,13 @@ class ImageViewer(QtGui.QMainWindow):
                 	self.volume_list = [image,]
                 image = self.image_list[0]
 
+        #active image control which panel any attached plugins will operate upon
+        if active_image_index > nviews:
+            raise ValueError("active_image cannot exceed the number of images in image list")
+        else:
+        	self.active_image_index = active_image_index
+        	active_image = self.image_list[active_image_index]
+
         ndims_list = []
         self.is_color = []
         for tmp in self.image_list:
@@ -153,7 +179,6 @@ class ImageViewer(QtGui.QMainWindow):
         if len(set(ndims_list)) > 1:
         	raise ValueError("all images in list must have the same number of dimensions")
 
-        print("type(image) = {}".format(type(image)))
         self.fig, self.ax = utils.figimage(image)
         self.canvas = self.fig.canvas
         self.canvas.setParent(self)
@@ -178,7 +203,6 @@ class ImageViewer(QtGui.QMainWindow):
         self._image_plots = [self._image_plot,]
         self._event_managers = [EventManager(self.ax), ]
 
-        self._update_original_image(image)
         self.plugins = []
 
         self.layout = QtGui.QVBoxLayout(self.main_widget)
@@ -214,7 +238,28 @@ class ImageViewer(QtGui.QMainWindow):
                 slider_kws['update_on'] = 'move'
                 slider_kws['orientation'] = 'horizontal'
                 if ortho_viewer:
-                	slice_axis = 0
+                    slice_axis = 0
+
+                    if False: #testing overlaying lines
+	                    line_props = None
+	                    props = dict(color='r', linewidth=1, alpha=0.4) #, solid_capstyle='butt')
+	                    props.update(line_props if line_props is not None else {})
+	                    x = (0, self.volume_list[1].shape[1])
+	                    y = (self.frame_list[1] + 0.5, self.frame_list[1] + 0.5)
+	                    self.lines = []
+	                    #self.artists = []
+	                    line = lines.Line2D(x, y, visible=True, animated=False, **props)
+	                    self.lines.append(line)
+
+	                    y2 = (0, self.volume_list[2].shape[1])
+	                    x2 = (self.frame_list[2] + 0.5, self.frame_list[2] + 0.5)
+	                    line2 = lines.Line2D(x2, y2, visible=True, animated=False, **props)
+	                    #self.lines.append(line2)
+
+
+	                    self.axes[0].add_line(line)
+	                    self.axes[0].add_line(line2)
+                    #self.artists.append(self._line)
                 else:
                 	slice_axis = -1
                 slider_kws['callback'] = partial(self.update_index, i=0, axis=slice_axis)
@@ -290,6 +335,8 @@ class ImageViewer(QtGui.QMainWindow):
 
                 self._tool_lists.append([])
                 self.connect_event('motion_notify_event', self._update_status_bar, i=v)
+
+            self._update_original_image(active_image)
 
             #will use largest height as the figure height
             canvas_heights = np.asarray(canvas_heights)
@@ -417,7 +464,7 @@ class ImageViewer(QtGui.QMainWindow):
     @image.setter
     def image(self, image):
         self._img = image
-        self.set_image(image, i=0)
+        self.set_image(image, i=self.active_image_index)
 
     def set_image(self, image, i=0):
     	"""image setter for any of the images in the list"""
@@ -522,7 +569,7 @@ elif False:
 	image3[...,-2:] = image[...,:2]
 
 	viewer = ImageViewer([image, image2, image3], image_labels=['Image 1','Image 2',''])
-else:
+elif False:
 	import nibabel as nib
 	nii = nib.load('/home/lee8rx/my_git/testdata/IRC04H_06M008/IRC04H_06M008_P_1_WIP_T1W_3D_IRCstandard32_SENSE_4_1_defaced.nii.gz')
 	voldata = nii.get_data().astype(np.float64)
@@ -531,6 +578,24 @@ else:
 	voldata = img_as_float(voldata)
 	voldata = voldata[:,::-1,::-1]
 	viewer = ImageViewer(voldata.transpose([2,1,0]), image_labels=['Axial','Coronal','Sagittal'], ortho_viewer=True)
+else:
+    from skimage.filter.rank import median
+    from skimage.morphology import disk
+
+    from skimage.viewer.widgets import OKCancelButtons, SaveButtons
+    def median_filter(image, radius):
+        return median(image, selem=disk(radius))
+
+    image = data.coins()
+    viewer = ImageViewer([image, image.copy()], image_labels=['Original', 'Filtered'], active_image_index=1)
+
+    plugin = Plugin(image_filter=median_filter)
+    plugin += Slider('radius', 2, 10, value_type='int')
+    plugin += SaveButtons()
+    plugin += OKCancelButtons()
+    
+    viewer += plugin
+    viewer.show()
 
 
 #viewer.image = image[...,0] #data.camera()
