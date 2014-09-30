@@ -155,6 +155,9 @@ class ImageViewer(QtGui.QMainWindow):
                 	self.volume_list = [image,]
                 image = self.image_list[0]
 
+#        if image_labels is not None:
+#            if len(image_labels) != len(self.image_list)
+#                raise ValueError("")
         #active image control which panel any attached plugins will operate upon
         if active_image_index > nviews:
             raise ValueError("active_image cannot exceed the number of images in image list")
@@ -296,11 +299,11 @@ class ImageViewer(QtGui.QMainWindow):
 
                 if (image_labels is not None): # and (v < len(image_labels)):
                     if v < len(image_labels):
-                        label = image_labels[v]
+                        label_text = image_labels[v]
                     else:
-                        label = ''
+                        label_text = ''
                     _label = QtGui.QLabel()
-                    _label.setText(image_labels[v])
+                    _label.setText(label_text)
                     _label.setAlignment(QtCore.Qt.AlignCenter)
                     sub_layout.addWidget(_label)
                 sub_layout.addWidget(canvas)
@@ -555,6 +558,43 @@ class ImageViewer(QtGui.QMainWindow):
         pass
 
 
+
+class CustomPlugin(Plugin):
+    """ Kludge to substitute a different argument instead of 
+    image_viewer.original_image as the first argument to the filter 
+    """
+    def __init__(self, first_argument_to_filter=None, **kwargs):
+        super(CustomPlugin, self).__init__(**kwargs)
+        self.first_argument_to_filter = first_argument_to_filter
+    def attach(self, image_viewer):
+        """Attach the plugin to an ImageViewer.
+
+        Note that the ImageViewer will automatically call this method when the
+        plugin is added to the ImageViewer. For example::
+
+            viewer += Plugin(...)
+
+        Also note that `attach` automatically calls the filter function so that
+        the image matches the filtered value specified by attached widgets.
+        """
+        self.setParent(image_viewer)
+        self.setWindowFlags(Qt.Dialog)
+
+        self.image_viewer = image_viewer
+        self.image_viewer.plugins.append(self)
+        #TODO: Always passing image as first argument may be bad assumption.
+        if self.first_argument_to_filter == None:
+            self.arguments = [self.image_viewer.original_image]
+        else:
+            self.arguments = [self.first_argument_to_filter]
+
+        # Call filter so that filtered image matches widget values
+        print("********************************")
+        print("* Filtering with Initial Values*")
+        print("********************************")
+        self.filter_image()
+
+
 if False:
 	image = data.camera()
 	image2 = data.coins()
@@ -571,14 +611,14 @@ elif False:
 	viewer = ImageViewer([image, image2, image3], image_labels=['Image 1','Image 2',''])
 elif False:
 	import nibabel as nib
-	nii = nib.load('/home/lee8rx/my_git/testdata/IRC04H_06M008/IRC04H_06M008_P_1_WIP_T1W_3D_IRCstandard32_SENSE_4_1_defaced.nii.gz')
+	nii = nib.load('/media/Data1/c-mind-data-copy/IRC04H_06M008/IRC04H_06M008_P_1_WIP_T1W_3D_IRCstandard32_SENSE_4_1.nii.gz')
 	voldata = nii.get_data().astype(np.float64)
 	voldata = voldata/voldata.max()
 	from skimage import img_as_float
 	voldata = img_as_float(voldata)
 	voldata = voldata[:,::-1,::-1]
 	viewer = ImageViewer(voldata.transpose([2,1,0]), image_labels=['Axial','Coronal','Sagittal'], ortho_viewer=True)
-else:
+elif False:
     from skimage.filter.rank import median
     from skimage.morphology import disk
 
@@ -596,7 +636,34 @@ else:
     
     viewer += plugin
     viewer.show()
+else:
+    from skimage.viewer.widgets import OKCancelButtons, SaveButtons, CheckBox
 
+    import nibabel as nib
+    nii_file = '/media/Data1/c-mind-data-copy/IRC04H_06M008/IRC04H_06M008_P_1_WIP_T1W_3D_IRCstandard32_SENSE_4_1.nii.gz'
+    input_nii = nib.load(nii_file)
+    voldata = input_nii.get_data().astype(np.float64)
+    voldata = voldata/voldata.max()
+    from skimage import img_as_float
+    voldata = img_as_float(voldata.transpose(2,1,0))
+
+    viewer = ImageViewer([voldata, voldata.copy()], image_labels=['Original', 'Defaced'], ortho_viewer=False)
+
+    from cmind.pipeline.cmind_deface import cmind_deface
+    defacer = partial(cmind_deface, output_nii = nii_file.replace('nii.gz','_defaced_GUI.nii.gz'))
+
+    plugin = CustomPlugin(image_filter=defacer, first_argument_to_filter=nii_file) # doctest: +SKIP
+    plugin += Slider('age_months', 0, 2000, value = 252, value_type='int')
+    plugin += Slider('crop_thresh', 0.001, 1, value = 0.03, value_type='float')
+    plugin += Slider('iso_xfm_mm', 1, 2, value = 1, value_type='int')
+    plugin += CheckBox(name='bias_cor', value = False)
+    plugin += CheckBox(name='keep_intermediate_files', value = False)
+    plugin += CheckBox(name='no_crop', value = False)
+    plugin += CheckBox(name='generate_figures', value = False)
+    plugin += CheckBox(name='verbose', value = True)
+    plugin += CheckBox(name='ForceUpdate', value = False)
+    viewer += plugin
+    viewer.show()
 
 #viewer.image = image[...,0] #data.camera()
 #viewer.set_image(image2[...,-1],i=2)
