@@ -118,7 +118,7 @@ def denoise_tv_bregman(image, weight, max_iter=100, eps=1e-3, isotropic=True):
 
 def _denoise_tv_chambolle_nd(im, multichannel, weight=0.1, eps=2.e-4,
                              n_iter_max=200):
-    """Perform total-variation denoising on nD images.
+    """Perform total-variation denoising on n-dimensional images.
 
     Parameters
     ----------
