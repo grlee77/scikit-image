@@ -116,7 +116,8 @@ def denoise_tv_bregman(image, weight, max_iter=100, eps=1e-3, isotropic=True):
     return _denoise_tv_bregman(image, weight, max_iter, eps, isotropic)
 
 
-def _denoise_tv_chambolle_nd(im, weight=0.1, eps=2.e-4, n_iter_max=200):
+def _denoise_tv_chambolle_nd(im, multichannel, weight=0.1, eps=2.e-4,
+                             n_iter_max=200):
     """Perform total-variation denoising on n-dimensional images.
 
     Parameters
@@ -151,13 +152,18 @@ def _denoise_tv_chambolle_nd(im, weight=0.1, eps=2.e-4, n_iter_max=200):
     g = np.zeros_like(p)
     d = np.zeros_like(im)
     i = 0
+    if multichannel:
+        # don't compute gradient or divergence along last (channels) axis
+        spatial_axes = range(ndim-1)
+    else:
+        spatial_axes = range(ndim)
     while i < n_iter_max:
         if i > 0:
             # d will be the (negative) divergence of p
             d = -p.sum(0)
             slices_d = [slice(None), ] * ndim
             slices_p = [slice(None), ] * (ndim + 1)
-            for ax in range(ndim):
+            for ax in spatial_axes:
                 slices_d[ax] = slice(1, None)
                 slices_p[ax+1] = slice(0, -1)
                 slices_p[0] = ax
@@ -172,13 +178,19 @@ def _denoise_tv_chambolle_nd(im, weight=0.1, eps=2.e-4, n_iter_max=200):
         # g stores the gradients of out along each axis
         # e.g. g[0] is the first order finite difference along axis 0
         slices_g = [slice(None), ] * (ndim + 1)
-        for ax in range(ndim):
+        for ax in spatial_axes:
             slices_g[ax+1] = slice(0, -1)
             slices_g[0] = ax
             g[slices_g] = np.diff(out, axis=ax)
             slices_g[ax+1] = slice(None)
 
-        norm = np.sqrt((g ** 2).sum(axis=0))[np.newaxis, ...]
+        if multichannel:
+            # sum along both gradients (axis 0) and channels (axis=-1)
+            norm = np.sqrt((g ** 2).sum(axis=0).sum(axis=-1))
+            norm = norm[np.newaxis, ..., np.newaxis]
+        else:
+            norm = np.sqrt((g ** 2).sum(axis=0))[np.newaxis, ...]
+
         E += weight * norm.sum()
         tau = 1. / (2.*ndim)
         norm *= tau / weight
@@ -220,8 +232,8 @@ def denoise_tv_chambolle(im, weight=0.1, eps=2.e-4, n_iter_max=200,
     n_iter_max : int, optional
         Maximal number of iterations used for the optimization.
     multichannel : bool, optional
-        Apply total-variation denoising separately for each channel. This
-        option should be true for color images, otherwise the denoising is
+        Apply vector-valued total-variation (TV) denoising [2]_. This option
+        should be true for color images, otherwise the denoising is
         also applied in the channels dimension.
 
     Returns
@@ -232,6 +244,9 @@ def denoise_tv_chambolle(im, weight=0.1, eps=2.e-4, n_iter_max=200,
     Notes
     -----
     Make sure to set the multichannel parameter appropriately for color images.
+
+    The vector-valued TV approach is generally superior to independently
+    denoising each color channel [2]_.
 
     The principle of total variation denoising is explained in
     http://en.wikipedia.org/wiki/Total_variation_denoising
@@ -250,6 +265,9 @@ def denoise_tv_chambolle(im, weight=0.1, eps=2.e-4, n_iter_max=200,
     .. [1] A. Chambolle, An algorithm for total variation minimization and
            applications, Journal of Mathematical Imaging and Vision,
            Springer, 2004, 20, 89-97.
+    .. [2] J. Duran, M. Moeller, C. Sbert, D. Cremers.  On the Implementation
+           of Collaborative Total Variation Regularization.   Image Processing
+           On Line (In Press:  http://www.ipol.im/pub/pre/141/).
 
     Examples
     --------
@@ -274,11 +292,5 @@ def denoise_tv_chambolle(im, weight=0.1, eps=2.e-4, n_iter_max=200,
     if not im_type.kind == 'f':
         im = img_as_float(im)
 
-    if multichannel:
-        out = np.zeros_like(im)
-        for c in range(im.shape[2]):
-            out[..., c] = _denoise_tv_chambolle_nd(im[..., c], weight, eps,
-                                                   n_iter_max)
-    else:
-        out = _denoise_tv_chambolle_nd(im, weight, eps, n_iter_max)
+    out = _denoise_tv_chambolle_nd(im, multichannel, weight, eps, n_iter_max)
     return out
