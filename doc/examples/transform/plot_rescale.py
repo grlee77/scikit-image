@@ -22,7 +22,7 @@ from skimage.transform import rescale, resize, downscale_local_mean
 
 image = data.camera()
 
-image_rescaled = rescale(image, 0.5)
+image_rescaled = rescale(image, 0.5, mode='reflect', multichannel=False)
 image_resized = resize(image, (400, 400), mode='reflect')
 image_downscaled = downscale_local_mean(image, (2, 3))
 
