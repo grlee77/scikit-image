@@ -2,17 +2,82 @@ import numpy as np
 cimport numpy as np
 cimport cython
 
+from libc.math cimport floor, exp
+from libc.stdlib cimport malloc, free
+
 ctypedef np.float64_t IMGDTYPE
+
 
 cdef double DISTANCE_CUTOFF = 5.0
 
-cdef extern from "fast_exp.h":
-    double fast_exp "EXP" (double)
+cdef double TABLE_PRECISION = 1000
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.cdivision(True)
+cdef init_exp_table(double * table):
+    """Precompute exp(-i) for i in [0, DISTANCE_CUTOFF]."""
+    cdef:
+        Py_ssize_t i
+    for i in range(<Py_ssize_t>(DISTANCE_CUTOFF*TABLE_PRECISION)):
+        table[i] = <double> exp(-i / TABLE_PRECISION)
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cdef double exp_table(double x, double * table) nogil:
+    """exp(-x) for x in [0, DISTANCE_CUTOFF]
+
+    returns 0 for x > 15
+    returns 1 for x < 0
+    """
+    cdef:
+        Py_ssize_t i
+        double x_table, y1, y2
+
+    if x >= DISTANCE_CUTOFF:
+        return 0.0
+    elif x <= 0:
+        return 1.0
+
+    x_table = x * TABLE_PRECISION
+    i = <Py_ssize_t> floor(x_table)
+    # first-order interpolation
+    y1 = table[i]
+    y2 = table[i+1]
+    return y1 + (y2 - y1)*(x_table - i)
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cpdef double _exp_lookup_test(x):
+    """lookup table test function."""
+
+    cdef double* table
+    cdef y
+
+    # create lookup table
+    table = <double *> malloc(<int>(TABLE_PRECISION * DISTANCE_CUTOFF) * sizeof(double))
+    init_exp_table(table)
+
+    # compute value via linear interpolation from the table
+    y = exp_table(x, table)
+
+    # free the table
+    free(table)
+
+    return y
+
+
+cpdef double _get_exp_cutoff():
+    return DISTANCE_CUTOFF
+
 
 @cython.boundscheck(False)
 cdef inline double patch_distance_2d(IMGDTYPE [:, :] p1,
-                                    IMGDTYPE [:, :] p2,
-                                    IMGDTYPE [:, ::] w, int s):
+                                     IMGDTYPE [:, :] p2,
+                                     IMGDTYPE [:, ::] w, int s, double *table):
     """
     Compute a Gaussian distance between two image patches.
 
@@ -53,14 +118,15 @@ cdef inline double patch_distance_2d(IMGDTYPE [:, :] p1,
         for j in range(s):
             tmp_diff = p1[i, j] - p2[i, j]
             distance += (w[i, j] * tmp_diff * tmp_diff)
-    distance = fast_exp(-distance)
+    distance = exp_table(distance, table)
     return distance
 
 
 @cython.boundscheck(False)
 cdef inline double patch_distance_2drgb(IMGDTYPE [:, :, :] p1,
-                                       IMGDTYPE [:, :, :] p2,
-                                       IMGDTYPE [:, ::] w, int s):
+                                        IMGDTYPE [:, :, :] p2,
+                                        IMGDTYPE [:, ::] w, int s,
+                                        double* table):
     """
     Compute a Gaussian distance between two image patches.
 
@@ -99,14 +165,15 @@ cdef inline double patch_distance_2drgb(IMGDTYPE [:, :, :] p1,
             for color in range(3):
                 tmp_diff = p1[i, j, color] - p2[i, j, color]
                 distance += w[i, j] * tmp_diff * tmp_diff
-    distance = fast_exp(-distance)
+    distance = exp_table(distance, table)
     return distance
 
 
 @cython.boundscheck(False)
 cdef inline double patch_distance_3d(IMGDTYPE [:, :, :] p1,
-                                    IMGDTYPE [:, :, :] p2,
-                                    IMGDTYPE [:, :, ::] w, int s):
+                                     IMGDTYPE [:, :, :] p2,
+                                     IMGDTYPE [:, :, ::] w, int s,
+                                     double *table):
     """
     Compute a Gaussian distance between two image patches.
 
@@ -143,7 +210,7 @@ cdef inline double patch_distance_3d(IMGDTYPE [:, :, :] p1,
             for k in range(s):
                 tmp_diff = p1[i, j, k] - p2[i, j, k]
                 distance += w[i, j, k] * tmp_diff * tmp_diff
-    distance = fast_exp(-distance)
+    distance = exp_table(distance, table)
     return distance
 
 
@@ -193,6 +260,11 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1):
     cdef double distance
     w = 1. / (n_ch * np.sum(w) * h ** 2) * w
 
+    # precomputed look-up table of exp(-x) values
+    cdef double * table
+    table = <double *> malloc(<int>(TABLE_PRECISION * DISTANCE_CUTOFF) * sizeof(double))
+    init_exp_table(table)
+
     # Coordinates of central pixel
     # Iterate over rows, taking padding into account
     for row in range(offset, n_row + offset):
@@ -226,14 +298,14 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1):
                                         col_start:col_end, 0],
                                  padded[row_start_i:row_end_i,
                                         col_start_j:col_end_j, 0],
-                                 w, s)
+                                 w, s, table)
                     else:
                         weight = patch_distance_2drgb(
                                  padded[row_start:row_end,
                                         col_start:col_end, :],
                                  padded[row_start_i:row_end_i,
                                         col_start_j:col_end_j, :],
-                                        w, s)
+                                        w, s, table)
 
                     # Collect results in weight sum
                     weight_sum += weight
@@ -245,6 +317,8 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1):
             # Normalize the result
             for color in range(n_ch):
                 result[row, col, color] = new_values[color] / weight_sum
+
+    free(table)
 
     # Return cropped result, undoing padding
     return result[offset:-offset, offset:-offset]
@@ -298,6 +372,11 @@ def _nl_means_denoising_3d(image, int s=7, int d=13, double h=0.1):
              col_start_k, col_end_k
     w = 1. / (np.sum(w) * h ** 2) * w
 
+    # precomputed look-up table of exp(-x) values
+    cdef double * table
+    table = <double *> malloc(<int>(TABLE_PRECISION * DISTANCE_CUTOFF) * sizeof(double))
+    init_exp_table(table)
+
     # Coordinates of central pixel
     # Iterate over planes, taking padding into account
     for pln in range(offset, n_pln + offset):
@@ -337,7 +416,7 @@ def _nl_means_denoising_3d(image, int s=7, int d=13, double h=0.1):
                                     padded[pln_start_i:pln_end_i,
                                            row_start_j:row_end_j,
                                            col_start_k:col_end_k],
-                                    w, s)
+                                    w, s, table)
                             # Collect results in weight sum
                             weight_sum += weight
                             new_value += weight * padded[pln + i,
@@ -345,6 +424,8 @@ def _nl_means_denoising_3d(image, int s=7, int d=13, double h=0.1):
 
                 # Normalize the result
                 result[pln, row, col] = new_value / weight_sum
+
+    free(table)
 
     # Return cropped result, undoing padding
     return result[offset:-offset, offset:-offset, offset:-offset]
@@ -565,6 +646,11 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1):
     n_row += 2 * pad_size
     n_col += 2 * pad_size
 
+    # precomputed look-up table of exp(-x) values
+    cdef double * table
+    table = <double *> malloc(<int>(TABLE_PRECISION * DISTANCE_CUTOFF) * sizeof(double))
+    init_exp_table(table)
+
     # Outer loops on patch shifts
     # With t2 >= 0, reference patch is always on the left of test patch
     # Iterate over shifts along the row axis
@@ -596,7 +682,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1):
                     # exp of large negative numbers is close to zero
                     if distance > DISTANCE_CUTOFF:
                         continue
-                    weight = alpha * fast_exp(-distance)
+                    weight = alpha * exp_table(distance, table)
                     # Accumulate weights corresponding to different shifts
                     weights[row, col] += weight
                     weights[row + t_row, col + t_col] += weight
@@ -614,6 +700,8 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1):
                 # No risk of division by zero, since the contribution
                 # of a null shift is strictly positive
                 result[row, col, channel] /= weights[row, col]
+
+    free(table)
 
     # Return cropped result, undoing padding
     return result[pad_size:-pad_size, pad_size:-pad_size]
@@ -678,6 +766,11 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1):
     n_row += 2 * pad_size
     n_col += 2 * pad_size
 
+    # precomputed look-up table of exp(-x) values
+    cdef double * table
+    table = <double *> malloc(<int>(TABLE_PRECISION * DISTANCE_CUTOFF) * sizeof(double))
+    init_exp_table(table)
+
     # Outer loops on patch shifts
     # With t2 >= 0, reference patch is always on the left of test patch
     # Iterate over shifts along the plane axis
@@ -719,7 +812,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1):
                             if distance > DISTANCE_CUTOFF:
                                 continue
 
-                            weight = alpha * fast_exp(-distance)
+                            weight = alpha * exp_table(distance, table)
                             # Accumulate weights for the different shifts
                             weights[pln, row, col] += weight
                             weights[pln + t_pln, row + t_row,
@@ -738,6 +831,8 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1):
                 # No risk of division by zero, since the contribution
                 # of a null shift is strictly positive
                 result[pln, row, col] /= weights[pln, row, col]
+
+    free(table)
 
     # Return cropped result, undoing padding
     return result[pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
