@@ -1,8 +1,11 @@
 import numpy as np
 
+from math import exp
 from skimage import restoration, data, color, img_as_float, measure
 from skimage.measure import compare_psnr
 from skimage.restoration._denoise import _wavelet_threshold
+from skimage.restoration._nl_means_denoising import (_exp_lookup_test,
+                                                     _get_exp_cutoff)
 import pywt
 
 from skimage._shared import testing
@@ -516,3 +519,24 @@ def test_multichannel_warnings():
     img = data.astronaut()
     assert_warns(UserWarning, restoration.denoise_bilateral, img)
     assert_warns(UserWarning, restoration.denoise_nl_means, img)
+
+
+def test_nl_means_exp_lookup():
+    """Test the exp(-x) look-up table used by non-local means."""
+    cutoff = _get_exp_cutoff()
+
+    # random values in range [0, cutoff]
+    rstate = np.random.RandomState(1234)
+    vals = rstate.rand(100) * cutoff
+
+    # verify accuracy of exp
+    errors = [np.abs(exp(-v) - _exp_lookup_test(v)) for v in vals]
+    assert_(np.max(errors) < 1e-6)
+
+    # returns 0 for values >= cutoff
+    assert_equal(_exp_lookup_test(cutoff), 0)
+    assert_equal(_exp_lookup_test(cutoff+1), 0)
+
+    # returns 1 for values <= 0
+    assert_equal(_exp_lookup_test(0), 1)
+    assert_equal(_exp_lookup_test(-1), 1)
