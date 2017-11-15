@@ -23,7 +23,7 @@ distances.  This can lead to a modest improvement in image quality.
 The `estimate_sigma` function can provide a good starting point for setting
 the `h` (and optionally, `sigma`) parameters for the non-local means algorithm.
 
-In this demo, `h` was hand-tuned to give the approximate best-case performance
+In this demo, `h`, was hand-tuned to give the approximate best-case performance
 of each variant.
 
 """
@@ -46,22 +46,25 @@ noisy = np.clip(noisy, 0, 1)
 sigma_est = np.mean(estimate_sigma(noisy, multichannel=True))
 print("estimated noise standard deviation = {}".format(sigma_est))
 
+patch_kw = dict(patch_size=5,      # 5x5 patches
+                patch_distance=6,  # 13x13 search area
+                multichannel=True)
+
 # slow algorithm
-denoise = denoise_nl_means(noisy, 5, 6, h=1.15*sigma_est, multichannel=True,
-                           fast_mode=False)
+denoise = denoise_nl_means(noisy, h=1.15*sigma_est, fast_mode=False,
+                           **patch_kw)
 
 # slow algorithm, sigma provided
-denoise2 = denoise_nl_means(noisy, 5, 6, h=0.8*sigma_est, multichannel=True,
-                            sigma=sigma_est, fast_mode=False)
+denoise2 = denoise_nl_means(noisy, h=0.8*sigma_est, sigma=sigma_est,
+                            fast_mode=False, **patch_kw)
 
 # fast algorithm
-denoise_fast = denoise_nl_means(noisy, 5, 6, h=0.8*sigma_est,
-                                multichannel=True, fast_mode=True)
+denoise_fast = denoise_nl_means(noisy, h=0.8*sigma_est, fast_mode=True,
+                                **patch_kw)
 
 # fast algorithm, sigma provided
-denoise2_fast = denoise_nl_means(noisy, 5, 6, h=0.6*sigma_est,
-                                 multichannel=True, sigma=sigma_est,
-                                 fast_mode=True)
+denoise2_fast = denoise_nl_means(noisy, h=0.6*sigma_est, sigma=sigma_est,
+                                 fast_mode=True, **patch_kw)
 
 fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(8, 6),
                        sharex=True, sharey=True,
