@@ -369,8 +369,7 @@ def _nl_means_denoising_3d(image, int s=7,
 @cython.cdivision(True)
 @cython.boundscheck(False)
 cdef inline float _integral_to_distance_2d(IMGDTYPE [:, ::] integral,
-                        int row, int col, int offset, float h2, float s2c,
-                        float var):
+                        int row, int col, int offset, float h2s2):
     """
     References
     ----------
@@ -389,12 +388,7 @@ cdef inline float _integral_to_distance_2d(IMGDTYPE [:, ::] integral,
                 integral[row - offset, col - offset] - \
                 integral[row - offset, col + offset] - \
                 integral[row + offset, col - offset]
-    if var > 0:
-        distance = max(distance / s2c - 2 * var, 0.0)
-        distance /= h2
-    else:
-        distance /= (s2c * h2)
-
+    distance = max(distance, 0.0) / h2s2
     return distance
 
 
@@ -402,7 +396,7 @@ cdef inline float _integral_to_distance_2d(IMGDTYPE [:, ::] integral,
 @cython.boundscheck(False)
 cdef inline float _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
                     int pln, int row, int col, int offset,
-                    float s_cube, float h_square, float var):
+                    float s_cube_h_square):
     """
     References
     ----------
@@ -425,11 +419,7 @@ cdef inline float _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
                 integral[pln - offset, row + offset, col + offset] -
                 integral[pln + offset, row - offset, col + offset] -
                 integral[pln + offset, row + offset, col - offset])
-    if var > 0:
-        distance = max(distance / s_cube - 2 * var, 0.0)
-        distance /= h_square
-    else:
-        distance /= (s_cube * h_square)
+    distance = max(distance, 0.0) / (s_cube_h_square)
     return distance
 
 
@@ -437,7 +427,8 @@ cdef inline float _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
 @cython.boundscheck(False)
 cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
                                IMGDTYPE [:, ::] integral, int t_row,
-                               int t_col, int n_row, int n_col, int n_ch):
+                               int t_col, int n_row, int n_col, int n_ch,
+                               float var):
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_row, t_col)``.
@@ -456,6 +447,9 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
     n_row : int
     n_col : int
     n_ch : int
+    var : float
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
 
     Notes
     -----
@@ -471,6 +465,7 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
             if n_ch == 1:
                 distance = (padded[row, col, 0] -
                             padded[row + t_row, col + t_col, 0])**2
+                distance -= 2 * var
             else:
                 distance = ((padded[row, col, 0] -
                              padded[row + t_row, col + t_col, 0])**2 +
@@ -478,6 +473,7 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
                              padded[row + t_row, col + t_col, 1])**2 +
                             (padded[row, col, 2] -
                              padded[row + t_row, col + t_col, 2])**2)
+                distance -= 6 * var
             integral[row, col] = distance + \
                                  integral[row - 1, col] + \
                                  integral[row, col - 1] - \
@@ -488,7 +484,8 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
 cdef inline _integral_image_3d(IMGDTYPE [:, :, ::] padded,
                                IMGDTYPE [:, :, ::] integral, int t_pln,
                                int t_row, int t_col, int n_pln, int n_row,
-                               int n_col):
+                               int n_col,
+                               float var):
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_pln, t_row, t_col)``.
@@ -509,6 +506,9 @@ cdef inline _integral_image_3d(IMGDTYPE [:, :, ::] padded,
     n_pln : int
     n_row : int
     n_col : int
+    var : float
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
 
     Notes
     -----
@@ -524,6 +524,7 @@ cdef inline _integral_image_3d(IMGDTYPE [:, :, ::] padded,
             for col in range(max(1, -t_col), min(n_col, n_col - t_col)):
                 distance = (padded[pln, row, col] -
                             padded[pln + t_pln, row + t_row, col + t_col])**2
+                distance -= 2 * var
                 integral[pln, row, col] = \
                     (distance +
                      integral[pln - 1, row, col] +
@@ -611,7 +612,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1,
             # padded and the same image shifted by (t_row, t_col)
             integral = np.zeros_like(padded[..., 0], order='C')
             _integral_image_2d(padded, integral, t_row, t_col,
-                               n_row, n_col, n_ch)
+                               n_row, n_col, n_ch, var)
 
             # Inner loops on pixel coordinates
             # Iterate over rows, taking offset and shift into account
@@ -622,7 +623,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1,
                                  min(n_col - offset, n_col - offset - t_col)):
                     # Compute squared distance between shifted patches
                     distance = _integral_to_distance_2d(integral, row, col,
-                                                     offset, h2, s2*n_ch, var)
+                                                     offset, h2s2)
                     # exp of large negative numbers is close to zero
                     if distance > DISTANCE_CUTOFF:
                         continue
@@ -736,7 +737,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, float h=0.1,
                 # padded and the same image shifted by (t_pln, t_row, t_col)
                 integral = np.zeros_like(padded)
                 _integral_image_3d(padded, integral, t_pln, t_row, t_col,
-                                   n_pln, n_row, n_col)
+                                   n_pln, n_row, n_col, var)
 
                 # Inner loops on pixel coordinates
                 # Iterate over planes, taking offset and shift into account
@@ -747,8 +748,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, float h=0.1,
                         for col in range(col_dist_min, col_dist_max):
                             # Compute squared distance between shifted patches
                             distance = _integral_to_distance_3d(integral,
-                                        pln, row, col, offset, s_cube,
-                                        h_square, var)
+                                        pln, row, col, offset, s_cube_h_square)
                             # exp of large negative numbers is close to zero
                             if distance > DISTANCE_CUTOFF:
                                 continue

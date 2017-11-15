@@ -23,8 +23,8 @@ distances.  This can lead to a modest improvement in image quality.
 The `estimate_sigma` function can provide a good starting point for setting
 the `h` (and optionally, `sigma`) parameters for the non-local means algorithm.
 
-Here, `h` and `sigma` have been hand-tuned to be near-optimal for this example,
-to show the potential best-case performance of each variant.
+In this demo, `h` was hand-tuned to give the approximate best-case performance
+of each variant.
 
 """
 import numpy as np
@@ -60,7 +60,7 @@ denoise_fast = denoise_nl_means(noisy, 5, 6, h=0.8*sigma_est,
 
 # fast algorithm, sigma provided
 denoise2_fast = denoise_nl_means(noisy, 5, 6, h=0.6*sigma_est,
-                                 multichannel=True, sigma=0.8*sigma_est,
+                                 multichannel=True, sigma=sigma_est,
                                  fast_mode=True)
 
 fig, ax = plt.subplots(nrows=2, ncols=3, figsize=(8, 6),
