@@ -10,6 +10,22 @@ other pixels are compared to the patch centered on the pixel of interest, and
 the average is performed only for pixels that have patches close to the current
 patch. As a result, this algorithm can restore well textures, that would be
 blurred by other denoising algoritm.
+
+When the `fast_mode` argument is `False`, a spatial Gaussian weighting is
+applied to the patches when computing patch distances.  When `fast_mode` is
+`True` a faster algorithm employing uniform spatial weighting on the patches
+is applied.
+
+For either of these cases, if the noise standard deviation, `sigma`, is
+provided, the expected noise variance is subtracted out when computing patch
+distances.  This can lead to a modest improvement in image quality.
+
+The `estimate_sigma` function can provide a good starting point for setting
+the `h` (and optionally, `sigma`) parameters for the non-local means algorithm.
+
+Here, `h` and `sigma` have been hand-tuned to be near-optimal for this example,
+to show the potential best-case performance of each variant.
+
 """
 import numpy as np
 import matplotlib.pyplot as plt
