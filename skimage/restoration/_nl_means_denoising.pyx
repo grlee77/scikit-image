@@ -24,6 +24,8 @@ cdef inline float patch_distance_2d(IMGDTYPE [:, :] p1,
         Array of weigths for the different pixels of the patches.
     s : int
         Linear size of the patches.
+    var : float
+        Expected noise variance.
 
     Returns
     -------
@@ -34,7 +36,7 @@ cdef inline float patch_distance_2d(IMGDTYPE [:, :] p1,
     -----
     The returned distance is given by
 
-    .. math::  \exp( -w (p1 - p2)^2)
+    .. math::  \exp( -w ((p1 - p2)^2 - 2*var))
     """
     cdef int i, j
     cdef int center = s / 2
@@ -46,11 +48,11 @@ cdef inline float patch_distance_2d(IMGDTYPE [:, :] p1,
     cdef float distance = 0
     for i in range(s):
         # exp of large negative numbers will be 0, so we'd better stop
-        # if distance > DISTANCE_CUTOFF:
-        #     return 0.
+        if distance > DISTANCE_CUTOFF:
+            return 0.
         for j in range(s):
             tmp_diff = p1[i, j] - p2[i, j]
-            distance += w[i, j] * (tmp_diff * tmp_diff - 2*var)
+            distance += w[i, j] * (tmp_diff * tmp_diff - 2 * var)
     distance = max(distance, 0)
     distance = exp(-distance)
     return distance
@@ -73,6 +75,8 @@ cdef inline float patch_distance_2drgb(IMGDTYPE [:, :, :] p1,
         Array of weights for the different pixels of the patches.
     s : int
         Linear size of the patches.
+    var : float
+        Expected noise variance.
 
     Returns
     -------
@@ -83,7 +87,7 @@ cdef inline float patch_distance_2drgb(IMGDTYPE [:, :, :] p1,
     -----
     The returned distance is given by
 
-    .. math::  \exp( -w (p1 - p2)^2)
+    .. math::  \exp( -w ((p1 - p2)^2 - 2*var))
     """
     cdef int i, j
     cdef int center = s / 2
@@ -92,12 +96,12 @@ cdef inline float patch_distance_2drgb(IMGDTYPE [:, :, :] p1,
     cdef float distance = 0
     for i in range(s):
         # exp of large negative numbers will be 0, so we'd better stop
-        #if distance > DISTANCE_CUTOFF:
-        #    return 0.
+        if distance > DISTANCE_CUTOFF:
+            return 0.
         for j in range(s):
             for color in range(3):
                 tmp_diff = p1[i, j, color] - p2[i, j, color]
-                distance += w[i, j] * (tmp_diff * tmp_diff - 2*var)
+                distance += w[i, j] * (tmp_diff * tmp_diff - 2 * var)
     distance = max(distance, 0)
     distance = exp(-distance)
     return distance
@@ -120,6 +124,8 @@ cdef inline float patch_distance_3d(IMGDTYPE [:, :, :] p1,
         Array of weights for the different pixels of the patches.
     s : int
         Linear size of the patches.
+    var : float
+        Expected noise variance.
 
     Returns
     -------
@@ -130,27 +136,27 @@ cdef inline float patch_distance_3d(IMGDTYPE [:, :, :] p1,
     -----
     The returned distance is given by
 
-    .. math::  \exp( -w (p1 - p2)^2)
+    .. math::  \exp( -w ((p1 - p2)^2 - 2*var))
     """
     cdef int i, j, k
     cdef float distance = 0
     cdef float tmp_diff
     for i in range(s):
         # exp of large negative numbers will be 0, so we'd better stop
-        #if distance > DISTANCE_CUTOFF:
-        #    return 0.
+        if distance > DISTANCE_CUTOFF:
+            return 0.
         for j in range(s):
             for k in range(s):
                 tmp_diff = p1[i, j, k] - p2[i, j, k]
-                distance += w[i, j, k] * (tmp_diff * tmp_diff - 2*var)
-        distance = max(distance, 0.0)
+                distance += w[i, j, k] * (tmp_diff * tmp_diff - 2 * var)
+    distance = max(distance, 0.0)
     distance = exp(-distance)
     return distance
 
 
 @cython.cdivision(True)
 @cython.boundscheck(False)
-def _nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1, float sigma=0.):
+def _nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1, float var=0.):
     """
     Perform non-local means denoising on 2-D RGB image
 
@@ -165,6 +171,9 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1, float sigma=0.
     h : float, optional
         Cut-off distance (in gray levels). The higher h, the more permissive
         one is in accepting patches.
+    var : float
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
 
     Returns
     -------
@@ -227,14 +236,14 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1, float sigma=0.
                                         col_start:col_end, 0],
                                  padded[row_start_i:row_end_i,
                                         col_start_j:col_end_j, 0],
-                                 w, s, sigma*sigma)
+                                 w, s, var)
                     else:
                         weight = patch_distance_2drgb(
                                  padded[row_start:row_end,
                                         col_start:col_end, :],
                                  padded[row_start_i:row_end_i,
                                         col_start_j:col_end_j, :],
-                                        w, s, sigma*sigma)
+                                        w, s, var)
 
                     # Collect results in weight sum
                     weight_sum += weight
@@ -254,7 +263,7 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1, float sigma=0.
 @cython.cdivision(True)
 @cython.boundscheck(False)
 def _nl_means_denoising_3d(image, int s=7,
-            int d=13, float h=0.1, float sigma=0.0):
+            int d=13, float h=0.1, float var=0.0):
     """
     Perform non-local means denoising on 3-D array
 
@@ -268,6 +277,9 @@ def _nl_means_denoising_3d(image, int s=7,
         Maximal distance in pixels where to search patches used for denoising.
     h : float, optional
         Cut-off distance (in gray levels).
+    var : float
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
 
     Returns
     -------
@@ -339,7 +351,7 @@ def _nl_means_denoising_3d(image, int s=7,
                                     padded[pln_start_i:pln_end_i,
                                            row_start_j:row_end_j,
                                            col_start_k:col_end_k],
-                                    w, s, sigma*sigma)
+                                    w, s, var*var)
                             # Collect results in weight sum
                             weight_sum += weight
                             new_value += weight * padded[pln + i,
@@ -377,8 +389,11 @@ cdef inline float _integral_to_distance_2d(IMGDTYPE [:, ::] integral,
                 integral[row - offset, col - offset] - \
                 integral[row - offset, col + offset] - \
                 integral[row + offset, col - offset]
-    distance = max(distance/s2c - 2*var, 0.0)
-    distance /= h2
+    if var > 0:
+        distance = max(distance / s2c - 2 * var, 0.0)
+        distance /= h2
+    else:
+        distance /= (s2c * h2)
 
     return distance
 
@@ -410,8 +425,11 @@ cdef inline float _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
                 integral[pln - offset, row + offset, col + offset] -
                 integral[pln + offset, row - offset, col + offset] -
                 integral[pln + offset, row + offset, col - offset])
-    distance = max(distance/s_cube - 2*var, 0.0)
-    distance /= h_square
+    if var > 0:
+        distance = max(distance / s_cube - 2 * var, 0.0)
+        distance /= h_square
+    else:
+        distance /= (s_cube * h_square)
     return distance
 
 
@@ -520,7 +538,7 @@ cdef inline _integral_image_3d(IMGDTYPE [:, :, ::] padded,
 @cython.cdivision(True)
 @cython.boundscheck(False)
 def _fast_nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1,
-                                float sigma=0.):
+                                float var=0.):
     """
     Perform fast non-local means denoising on 2-D array, with the outer
     loop on patch shifts in order to reduce the number of operations.
@@ -536,6 +554,9 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1,
     h : float, optional
         Cut-off distance (in gray levels). The higher h, the more permissive
         one is in accepting patches.
+    var : float
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
 
     Returns
     -------
@@ -601,7 +622,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1,
                                  min(n_col - offset, n_col - offset - t_col)):
                     # Compute squared distance between shifted patches
                     distance = _integral_to_distance_2d(integral, row, col,
-                                                     offset, h2, s2*n_ch, sigma*sigma)
+                                                     offset, h2, s2*n_ch, var)
                     # exp of large negative numbers is close to zero
                     if distance > DISTANCE_CUTOFF:
                         continue
@@ -631,7 +652,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, float h=0.1,
 @cython.cdivision(True)
 @cython.boundscheck(False)
 def _fast_nl_means_denoising_3d(image, int s=5, int d=7, float h=0.1,
-                                float sigma=0.):
+                                float var=0.):
     """
     Perform fast non-local means denoising on 3-D array, with the outer
     loop on patch shifts in order to reduce the number of operations.
@@ -647,6 +668,9 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, float h=0.1,
     h : float, optional
         cut-off distance (in gray levels). The higher h, the more permissive
         one is in accepting patches.
+    var : float
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
 
     Returns
     -------
@@ -724,7 +748,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, float h=0.1,
                             # Compute squared distance between shifted patches
                             distance = _integral_to_distance_3d(integral,
                                         pln, row, col, offset, s_cube,
-                                        h_square, sigma*sigma)
+                                        h_square, var)
                             # exp of large negative numbers is close to zero
                             if distance > DISTANCE_CUTOFF:
                                 continue
