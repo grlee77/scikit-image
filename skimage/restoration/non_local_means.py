@@ -126,21 +126,26 @@ def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
     >>> a += 0.3 * np.random.randn(*a.shape)
     >>> denoised_a = denoise_nl_means(a, 7, 5, 0.1)
     """
-    if image.ndim == 2:
-        image = image[..., np.newaxis]
+    if multichannel is None:
+        warn('denoise_nl_means will default to multichannel=False in v0.15')
         multichannel = True
-    if image.ndim != 3:
+
+    ndim_no_channel = image.ndim - int(multichannel)
+    if not multichannel:
+        image = image[..., np.newaxis]
+    if (ndim_no_channel < 2) or (ndim_no_channel > 3):
         raise NotImplementedError("Non-local means denoising is only \
-        implemented for 2D grayscale and RGB images or 3-D grayscale images.")
+        implemented for 2D or 3D grayscale or multichannel images.")
     nlm_kwargs = dict(s=patch_size, d=patch_distance, h=h, var=sigma * sigma)
-    if multichannel:  # 2-D images
+
+    if ndim_no_channel == 2:  # 2-D images
         if fast_mode:
             return np.squeeze(
                 np.asarray(_fast_nl_means_denoising_2d(image, **nlm_kwargs)))
         else:
             return np.squeeze(
                 np.asarray(_nl_means_denoising_2d(image, **nlm_kwargs)))
-    else:  # 3-D grayscale
+    elif ndim_no_channel == 3:  # 3-D grayscale
         if fast_mode:
             return np.asarray(_fast_nl_means_denoising_3d(image, **nlm_kwargs))
         else:
