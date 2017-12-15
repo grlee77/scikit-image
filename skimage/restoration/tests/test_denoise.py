@@ -292,12 +292,12 @@ def test_denoise_nl_means_2d():
     img += sigma * np.random.randn(*img.shape)
     for s in [sigma, 0]:
         denoised = restoration.denoise_nl_means(img, 7, 5, 0.2, fast_mode=True,
-                                                multichannel=True, sigma=s)
+                                                multichannel=False, sigma=s)
         # make sure noise is reduced
         assert_(img.std() > denoised.std())
         denoised = restoration.denoise_nl_means(img, 7, 5, 0.2,
                                                 fast_mode=False,
-                                                multichannel=True, sigma=s)
+                                                multichannel=False, sigma=s)
         # make sure noise is reduced
         assert_(img.std() > denoised.std())
 
@@ -364,7 +364,7 @@ def test_denoise_nl_means_multichannel():
 def test_denoise_nl_means_wrong_dimension():
     img = np.zeros((5, 5, 5, 5))
     with testing.raises(NotImplementedError):
-        restoration.denoise_nl_means(img, multichannel=True)
+        restoration.denoise_nl_means(img, multichannel=False)
 
 
 def test_no_denoising_for_small_h():
@@ -373,10 +373,10 @@ def test_no_denoising_for_small_h():
     img += 0.3*np.random.randn(*img.shape)
     # very small h should result in no averaging with other patches
     denoised = restoration.denoise_nl_means(img, 7, 5, 0.01, fast_mode=True,
-                                            multichannel=True)
+                                            multichannel=False)
     assert_(np.allclose(denoised, img))
     denoised = restoration.denoise_nl_means(img, 7, 5, 0.01, fast_mode=False,
-                                            multichannel=True)
+                                            multichannel=False)
     assert_(np.allclose(denoised, img))
 
 
