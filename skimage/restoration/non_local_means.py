@@ -3,7 +3,8 @@ from ._nl_means_denoising import (
     _nl_means_denoising_2d,
     _nl_means_denoising_3d,
     _fast_nl_means_denoising_2d,
-    _fast_nl_means_denoising_3d)
+    _fast_nl_means_denoising_3d,
+    _fast_nl_means_denoising_4d)
 
 
 def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
@@ -124,24 +125,41 @@ def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
     >>> a = np.zeros((40, 40))
     >>> a[10:-10, 10:-10] = 1.
     >>> a += 0.3 * np.random.randn(*a.shape)
-    >>> denoised_a = denoise_nl_means(a, 7, 5, 0.1)
+    >>> denoised_a = denoise_nl_means(a, 7, 5, 0.1, multichannel=False)
     """
-    if image.ndim == 2:
-        image = image[..., np.newaxis]
+    if multichannel is None:
+        warn('denoise_nl_means will default to multichannel=False in v0.15')
         multichannel = True
-    if image.ndim != 3:
+
+    ndim_no_channel = image.ndim - int(multichannel)
+    if not multichannel:
+        image = image[..., np.newaxis]
+    if (ndim_no_channel < 2) or (ndim_no_channel > 4):
         raise NotImplementedError("Non-local means denoising is only \
-        implemented for 2D grayscale and RGB images or 3-D grayscale images.")
+        implemented for 2D, 3D or 4D grayscale or multichannel images.")
     nlm_kwargs = dict(s=patch_size, d=patch_distance, h=h, var=sigma * sigma)
-    if multichannel:  # 2-D images
+    if ndim_no_channel == 2:
         if fast_mode:
-            return np.squeeze(
-                np.asarray(_fast_nl_means_denoising_2d(image, **nlm_kwargs)))
+            nlm_func = _fast_nl_means_denoising_2d
         else:
-            return np.squeeze(
-                np.asarray(_nl_means_denoising_2d(image, **nlm_kwargs)))
-    else:  # 3-D grayscale
+            nlm_func = _nl_means_denoising_2d
+    elif ndim_no_channel == 3:
         if fast_mode:
-            return np.asarray(_fast_nl_means_denoising_3d(image, **nlm_kwargs))
+            nlm_func = _fast_nl_means_denoising_3d
         else:
-            return np.asarray(_nl_means_denoising_3d(image, **nlm_kwargs))
+            if multichannel:
+                raise NotImplementedError(
+                    "Multichannel 3D requires fast_mode = True.")
+            return np.asarray(
+                _nl_means_denoising_3d(image[..., 0], **nlm_kwargs))
+    elif ndim_no_channel == 4:
+        if fast_mode:
+            nlm_func = _fast_nl_means_denoising_4d
+        else:
+            raise NotImplementedError(
+                "4D denoising requires fast_mode = True.")
+    dn = np.asarray(nlm_func(image, **nlm_kwargs))
+    if not multichannel:
+        # remove channels dimension
+        dn = dn[..., 0]
+    return dn
