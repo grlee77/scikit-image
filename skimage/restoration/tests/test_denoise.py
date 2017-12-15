@@ -346,6 +346,19 @@ def test_denoise_nl_means_3d():
         assert_(peak_signal_noise_ratio(img, denoised) > psnr_noisy)
 
 
+def test_denoise_nl_means_4d():
+    img = np.zeros((12, 12, 8, 4))
+    img[2:-2, 2:-2, 2:-2, :] = 1.
+    sigma = 0.3
+    imgn = img + sigma * np.random.randn(*img.shape)
+    denoised = restoration.denoise_nl_means(imgn, 3, 2, 0.2, fast_mode=True,
+                                            multichannel=False, sigma=sigma)
+    denoised3mc = restoration.denoise_nl_means(imgn, 3, 2, 0.2, fast_mode=True,
+                                               multichannel=True, sigma=sigma)
+    denoised3 = restoration.denoise_nl_means(imgn[..., 0], 3, 2, 0.2, fast_mode=True,
+                                             multichannel=False, sigma=sigma)
+
+
 def test_denoise_nl_means_multichannel():
     # for true 3D data, 3D denoising is better than denoising as 2D+channels
     img = np.zeros((13, 10, 8))
@@ -362,9 +375,25 @@ def test_denoise_nl_means_multichannel():
 
 
 def test_denoise_nl_means_wrong_dimension():
-    img = np.zeros((5, 5, 5, 5))
+    # 5D not supported
+    img = np.zeros((5, 5, 5, 5, 5))
     with testing.raises(NotImplementedError):
         restoration.denoise_nl_means(img, multichannel=False)
+
+    # 3D + channels only for fast mode
+    img = np.zeros((5, 5, 5, 5))
+    with testing.raises(NotImplementedError):
+        restoration.denoise_nl_means(img, multichannel=False, fast_mode=False)
+
+    # 4D only for fast mode
+    img = np.zeros((5, 5, 5, 5))
+    with testing.raises(NotImplementedError):
+        restoration.denoise_nl_means(img, multichannel=False, fast_mode=False)
+
+    # 4D + channels only for fast mode
+    img = np.zeros((5, 5, 5, 5, 5))
+    with testing.raises(NotImplementedError):
+        restoration.denoise_nl_means(img, multichannel=True, fast_mode=False)
 
 
 def test_no_denoising_for_small_h():
