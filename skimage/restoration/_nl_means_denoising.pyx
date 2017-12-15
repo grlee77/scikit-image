@@ -186,13 +186,13 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
     """
     if s % 2 == 0:
         s += 1  # odd value for symmetric patch
-    cdef int n_row, n_col, n_ch
-    n_row, n_col, n_ch = image.shape
+    cdef int n_row, n_col, n_channels
+    n_row, n_col, n_channels = image.shape
     cdef int offset = s / 2
     cdef int row, col, i, j, color
     cdef int row_start, row_end, col_start, col_end
     cdef int row_start_i, row_end_i, col_start_j, col_end_j
-    cdef IMGDTYPE [::1] new_values = np.zeros(n_ch).astype(np.float64)
+    cdef IMGDTYPE [::1] new_values = np.zeros(n_channels).astype(np.float64)
     cdef IMGDTYPE [:, :, ::1] padded = np.ascontiguousarray(np.pad(image,
                        ((offset, offset), (offset, offset), (0, 0)),
                         mode='reflect').astype(np.float64))
@@ -205,7 +205,7 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
                              -(xg_row ** 2 + xg_col ** 2) / (2 * A ** 2)).
                              astype(np.float64))
     cdef double distance
-    w = 1. / (n_ch * np.sum(w) * h ** 2) * w
+    w = 1. / (n_channels * np.sum(w) * h ** 2) * w
 
     # Coordinates of central pixel
     # Iterate over rows, taking padding into account
@@ -215,7 +215,7 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
         # Iterate over columns, taking padding into account
         for col in range(offset, n_col + offset):
             # Initialize per-channel bins
-            for color in range(n_ch):
+            for color in range(n_channels):
                 new_values[color] = 0
             # Reset weights for each local region
             weight_sum = 0
@@ -234,7 +234,7 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
                     col_start_j = col_start + j
                     col_end_j = col_end + j
                     # Shortcut for grayscale, else assume RGB
-                    if n_ch == 1:
+                    if n_channels == 1:
                         weight = patch_distance_2d(
                                  padded[row_start:row_end,
                                         col_start:col_end, 0],
@@ -252,12 +252,12 @@ def _nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
                     # Collect results in weight sum
                     weight_sum += weight
                     # Apply to each channel multiplicatively
-                    for color in range(n_ch):
+                    for color in range(n_channels):
                         new_values[color] += weight * padded[row + i,
                                                              col + j, color]
 
             # Normalize the result
-            for color in range(n_ch):
+            for color in range(n_channels):
                 result[row, col, color] = new_values[color] / weight_sum
 
     # Return cropped result, undoing padding
@@ -422,9 +422,56 @@ cdef inline double _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
     return distance
 
 
+cdef inline double _integral_to_distance_4d(IMGDTYPE [:, :, :, ::] integral,
+                                            int time, int pln, int row,
+                                            int col, int offset,
+                                            double s4_h_square):
+    """
+    References
+    ----------
+    J. Darbon, A. Cunha, T.F. Chan, S. Osher, and G.J. Jensen, Fast
+    nonlocal filtering applied to electron cryomicroscopy, in 5th IEEE
+    International Symposium on Biomedical Imaging: From Nano to Macro,
+    2008, pp. 1331-1334.
+
+    Jacques Froment. Parameter-Free Fast Pixelwise Non-Local Means
+    Denoising. Image Processing On Line, 2014, vol. 4, p. 300-326.
+
+    Used in _fast_nl_means_denoising_4d
+
+    The coefficients for the terms were determined using Eq. 54 of [1]_ as
+    implemented in the integral_image_coefficients function.
+
+    E. Tapia.  A note on the computation of high-dimensional integral images.
+    Pattern Recognition Letters 2011. Vol. 32, pp.197-201.
+
+
+    """
+    cdef double distance
+    distance = (
+        integral[time - offset, pln - offset, row - offset, col - offset] -
+        integral[time - offset, pln - offset, row - offset, col + offset] -
+        integral[time - offset, pln - offset, row + offset, col - offset] +
+        integral[time - offset, pln - offset, row + offset, col + offset] -
+        integral[time - offset, pln + offset, row - offset, col - offset] +
+        integral[time - offset, pln + offset, row - offset, col + offset] +
+        integral[time - offset, pln + offset, row + offset, col - offset] -
+        integral[time - offset, pln + offset, row + offset, col + offset] -
+        integral[time + offset, pln - offset, row - offset, col - offset] +
+        integral[time + offset, pln - offset, row - offset, col + offset] +
+        integral[time + offset, pln - offset, row + offset, col - offset] -
+        integral[time + offset, pln - offset, row + offset, col + offset] +
+        integral[time + offset, pln + offset, row - offset, col - offset] -
+        integral[time + offset, pln + offset, row - offset, col + offset] -
+        integral[time + offset, pln + offset, row + offset, col - offset] +
+        integral[time + offset, pln + offset, row + offset, col + offset])
+    distance = max(distance, 0.0) / (s4_h_square)
+    return distance
+
+
 cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
                                IMGDTYPE [:, ::] integral, int t_row,
-                               int t_col, int n_row, int n_col, int n_ch,
+                               int t_col, int n_row, int n_col, int n_channels,
                                double var):
     """
     Computes the integral of the squared difference between an image ``padded``
@@ -432,7 +479,7 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
 
     Parameters
     ----------
-    padded : ndarray of shape (n_row, n_col, n_ch)
+    padded : ndarray of shape (n_row, n_col, n_channels)
         Image of interest.
     integral : ndarray
         Output of the function. The array is filled with integral values.
@@ -443,7 +490,7 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
         Shift along the column axis.
     n_row : int
     n_col : int
-    n_ch : int
+    n_channels : int
     var : double
         Expected noise variance.  If non-zero, this is used to reduce the
         apparent patch distances by the expected distance due to the noise.
@@ -459,7 +506,7 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
     cdef double distance
     for row in range(max(1, -t_row), min(n_row, n_row - t_row)):
         for col in range(max(1, -t_col), min(n_col, n_col - t_col)):
-            if n_ch == 1:
+            if n_channels == 1:
                 distance = (padded[row, col, 0] -
                             padded[row + t_row, col + t_col, 0])**2
                 distance -= 2 * var
@@ -480,7 +527,7 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
 cdef inline _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
                                IMGDTYPE [:, :, ::] integral, int t_pln,
                                int t_row, int t_col, int n_pln, int n_row,
-                               int n_col, int n_ch,
+                               int n_col, int n_channels,
                                double var):
     """
     Computes the integral of the squared difference between an image ``padded``
@@ -513,19 +560,20 @@ cdef inline _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
     ``transform.integral_image``, but this helper function saves memory
     by avoiding copies of ``padded``.
     """
-    cdef int pln, row, col, ch
+    cdef int pln, row, col, channel
     cdef double distance
     for pln in range(max(1, -t_pln), min(n_pln, n_pln - t_pln)):
         for row in range(max(1, -t_row), min(n_row, n_row - t_row)):
             for col in range(max(1, -t_col), min(n_col, n_col - t_col)):
-                if n_ch == 1:
+                if n_channels == 1:
                     distance = (padded[pln, row, col, 0] -
                                 padded[pln + t_pln, row + t_row, col + t_col, 0])**2
                 else:
-                    for ch in range(n_ch):
-                        distance = (padded[pln, row, col, ch] -
-                                    padded[pln + t_pln, row + t_row, col + t_col, ch])**2
-                distance -= 2 * n_ch * var
+                    distance = 0
+                    for channel in range(n_channels):
+                        distance += (padded[pln, row, col, channel] -
+                                    padded[pln + t_pln, row + t_row, col + t_col, channel])**2
+                distance -= 2 * n_channels * var
                 integral[pln, row, col] = \
                     (distance +
                      integral[pln - 1, row, col] +
@@ -535,6 +583,84 @@ cdef inline _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
                      integral[pln - 1, row - 1, col] -
                      integral[pln, row - 1, col - 1] -
                      integral[pln - 1, row, col - 1])
+
+
+cdef inline _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
+                               IMGDTYPE [:, :, :, ::] integral, int t_time,
+                               int t_pln, int t_row, int t_col, int n_time,
+                               int n_pln, int n_row, int n_col, int n_channels,
+                               double var):
+    """
+    Computes the integral of the squared difference between an image ``padded``
+    and the same image shifted by ``(t_pln, t_row, t_col)``.
+
+    Parameters
+    ----------
+    padded : ndarray of shape (n_time, n_pln, n_row, n_col)
+        Image of interest.
+    integral : ndarray
+        Output of the function. The array is filled with integral values.
+        ``integral`` should have the same shape as ``padded``.
+    t_time : int
+        Shift along the time axis.
+    t_pln : int
+        Shift along the plane axis.
+    t_row : int
+        Shift along the row axis.
+    t_col : int
+        Shift along the column axis.
+    n_time : int
+    n_pln : int
+    n_row : int
+    n_col : int
+    var : double
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
+
+    Notes
+    -----
+
+    The integral computation could be performed using
+    ``transform.integral_image``, but this helper function saves memory
+    by avoiding copies of ``padded``.
+    """
+    cdef int time, pln, row, col, channel
+    cdef double distance
+    for time in range(max(1, -t_time), min(n_time, n_time - t_time)):
+        for pln in range(max(1, -t_pln), min(n_pln, n_pln - t_pln)):
+            for row in range(max(1, -t_row), min(n_row, n_row - t_row)):
+                for col in range(max(1, -t_col), min(n_col, n_col - t_col)):
+                    if n_channels == 1:
+                        distance = (padded[time, pln, row, col, 0] -
+                                    padded[time + t_time, pln + t_pln, row + t_row, col + t_col, 0])**2
+                    else:
+                        distance = 0
+                        for channel in range(n_channels):
+                            distance += (padded[time, pln, row, col, channel] -
+                                         padded[time + t_time, pln + t_pln, row + t_row, col + t_col, channel])**2
+                    distance -= 2 * n_channels * var
+
+                    integral[time, pln, row, col] = \
+                        (distance +
+                         # add terms with shift along 1 axis
+                         integral[time - 1, pln, row, col] +
+                         integral[time, pln - 1, row, col] +
+                         integral[time, pln, row - 1, col] +
+                         integral[time, pln, row, col - 1] +
+                         # add terms with shift along 3 axes
+                         integral[time, pln - 1, row - 1, col - 1] +
+                         integral[time - 1, pln, row - 1, col - 1] +
+                         integral[time - 1, pln - 1, row, col - 1] +
+                         integral[time - 1, pln - 1, row - 1, col] -
+                         # subtract terms with shift along 2 axes
+                         integral[time, pln, row - 1, col - 1] -
+                         integral[time, pln - 1, row, col - 1] -
+                         integral[time, pln - 1, row - 1, col] -
+                         integral[time - 1, pln, row, col - 1]  -
+                         integral[time - 1, pln, row - 1, col] -
+                         integral[time - 1, pln - 1, row, col] -
+                         # subtract term with shift along 4 axes
+                         integral[time - 1, pln - 1, row - 1, col - 1])
 
 
 def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
@@ -585,13 +711,13 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
     cdef IMGDTYPE [:, :, ::1] result = np.zeros_like(padded)
     cdef IMGDTYPE [:, ::1] weights = np.zeros_like(padded[..., 0], order='C')
     cdef IMGDTYPE [:, ::1] integral = np.zeros_like(padded[..., 0], order='C')
-    cdef int n_row, n_col, n_ch, t_row, t_col, row, col, ch
+    cdef int n_row, n_col, n_channels, t_row, t_col, row, col, channel
     cdef double weight, distance
     cdef double alpha
     cdef double h2 = h ** 2.
     cdef double s2 = s ** 2.
-    n_row, n_col, n_ch = image.shape
-    cdef double h2s2 = n_ch * h2 * s2
+    n_row, n_col, n_channels = image.shape
+    cdef double h2s2 = n_channels * h2 * s2
     n_row += 2 * pad_size
     n_col += 2 * pad_size
 
@@ -611,7 +737,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
             # padded and the same image shifted by (t_row, t_col)
             integral = np.zeros_like(padded[..., 0], order='C')
             _integral_image_2d(padded, integral, t_row, t_col,
-                               n_row, n_col, n_ch, var)
+                               n_row, n_col, n_channels, var)
 
             # Inner loops on pixel coordinates
             # Iterate over rows, taking offset and shift into account
@@ -631,19 +757,19 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
                     weights[row, col] += weight
                     weights[row + t_row, col + t_col] += weight
                     # Iterate over channels
-                    for ch in range(n_ch):
-                        result[row, col, ch] += weight * \
-                                    padded[row + t_row, col + t_col, ch]
-                        result[row + t_row, col + t_col, ch] += \
-                                        weight * padded[row, col, ch]
+                    for channel in range(n_channels):
+                        result[row, col, channel] += weight * \
+                                    padded[row + t_row, col + t_col, channel]
+                        result[row + t_row, col + t_col, channel] += \
+                                        weight * padded[row, col, channel]
 
     # Normalize pixel values using sum of weights of contributing patches
     for row in range(offset, n_row - offset):
         for col in range(offset, n_col - offset):
-            for ch in range(n_ch):
+            for channel in range(n_channels):
                 # No risk of division by zero, since the contribution
                 # of a null shift is strictly positive
-                result[row, col, ch] /= weights[row, col]
+                result[row, col, channel] /= weights[row, col]
 
     # Return cropped result, undoing padding
     return result[pad_size:-pad_size, pad_size:-pad_size]
@@ -699,7 +825,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
     cdef IMGDTYPE [:, :, ::1] weights = np.zeros_like(padded[..., 0])
     cdef IMGDTYPE [:, :, ::1] integral = np.zeros_like(padded[..., 0])
     cdef int n_pln, n_row, n_col, t_pln, t_row, t_col, \
-             pln, row, col, ch, n_ch
+             pln, row, col, channel, n_channels
     cdef int pln_dist_min, pln_dist_max, row_dist_min, row_dist_max, \
              col_dist_min, col_dist_max
     cdef double weight, distance
@@ -707,7 +833,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
     cdef double h_square = h ** 2.0
     cdef double s_cube = s ** 3.0
     cdef double s_cube_h_square = h_square * s_cube
-    n_pln, n_row, n_col, n_ch = image.shape
+    n_pln, n_row, n_col, n_channels = image.shape
     n_pln += 2 * pad_size
     n_row += 2 * pad_size
     n_col += 2 * pad_size
@@ -737,7 +863,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
                 # padded and the same image shifted by (t_pln, t_row, t_col)
                 integral = np.zeros_like(padded[..., 0])
                 _integral_image_3d(padded, integral, t_pln, t_row, t_col,
-                                   n_pln, n_row, n_col, n_ch, var)
+                                   n_pln, n_row, n_col, n_channels, var)
 
                 # Inner loops on pixel coordinates
                 # Iterate over planes, taking offset and shift into account
@@ -758,22 +884,159 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
                             weights[pln, row, col] += weight
                             weights[pln + t_pln, row + t_row,
                                                  col + t_col] += weight
-                            for ch in range(n_ch):
-                                result[pln, row, col, ch] += weight * \
+                            for channel in range(n_channels):
+                                result[pln, row, col, channel] += weight * \
                                         padded[pln + t_pln, row + t_row,
-                                                            col + t_col, ch]
+                                                            col + t_col, channel]
                                 result[pln + t_pln, row + t_row,
-                                       col + t_col, ch] += weight * \
-                                                      padded[pln, row, col, ch]
+                                       col + t_col, channel] += weight * \
+                                                      padded[pln, row, col, channel]
 
     # Normalize pixel values using sum of weights of contributing patches
     for pln in range(offset, n_pln - offset):
         for row in range(offset, n_row - offset):
             for col in range(offset, n_col - offset):
-                for ch in range(n_ch):
+                for channel in range(n_channels):
                     # No risk of division by zero, since the contribution
                     # of a null shift is strictly positive
-                    result[pln, row, col, ch] /= weights[pln, row, col]
+                    result[pln, row, col, channel] /= weights[pln, row, col]
 
     # Return cropped result, undoing padding
     return result[pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
+
+
+def _fast_nl_means_denoising_4d(image, int s=5, int d=7, double h=0.1,
+                                double var=0.):
+    """
+    Perform fast non-local means denoising on 3-D array, with the outer
+    loop on patch shifts in order to reduce the number of operations.
+
+    Parameters
+    ----------
+    image : ndarray
+        4-D input data to be denoised.
+    s : int, optional
+        Size of patches used for denoising.
+    d : int, optional
+        Maximal distance in pixels where to search patches used for denoising.
+    h : double, optional
+        cut-off distance (in gray levels). The higher h, the more permissive
+        one is in accepting patches.
+    var : double
+        Expected noise variance.  If non-zero, this is used to reduce the
+        apparent patch distances by the expected distance due to the noise.
+
+    Returns
+    -------
+    result : ndarray
+        Denoised image, of same shape as input image.
+
+    References
+    ----------
+    J. Darbon, A. Cunha, T.F. Chan, S. Osher, and G.J. Jensen, Fast
+    nonlocal filtering applied to electron cryomicroscopy, in 5th IEEE
+    International Symposium on Biomedical Imaging: From Nano to Macro,
+    2008, pp. 1331-1334.
+
+    Jacques Froment. Parameter-Free Fast Pixelwise Non-Local Means
+    Denoising. Image Processing On Line, 2014, vol. 4, p. 300-326.
+    """
+    if s % 2 == 0:
+        s += 1  # odd value for symmetric patch
+    cdef int offset = s / 2
+    # Image padding: we need to account for patch size, possible shift,
+    # + 1 for the boundary effects in finite differences
+    cdef int pad_size = offset + d + 1
+    cdef IMGDTYPE [:, :, :, :, ::1] padded = np.ascontiguousarray(np.pad(image,
+                                ((pad_size, pad_size), (pad_size, pad_size),
+                                 (pad_size, pad_size), (pad_size, pad_size),
+                                 (0, 0)),
+                                mode='reflect').astype(np.float64))
+    cdef IMGDTYPE [:, :, :, :, ::1] result = np.zeros_like(padded)
+    cdef IMGDTYPE [:, :, :, ::1] weights = np.zeros_like(padded[..., 0])
+    cdef IMGDTYPE [:, :, :, ::1] integral = np.zeros_like(padded[..., 0])
+    cdef int n_pln, n_row, n_col, t_pln, t_row, t_col, \
+             pln, row, col, channel, n_channels, t_time, n_time, time
+    cdef int time_dist_min, time_dist_max, pln_dist_min, pln_dist_max, \
+             row_dist_min, row_dist_max, col_dist_min, col_dist_max,
+    cdef double weight, distance
+    cdef double alpha
+    cdef double h_square = h ** 2.0
+    cdef double s4 = s ** 4.0
+    cdef double s4_h_square = h_square * s4
+    n_time, n_pln, n_row, n_col, n_channels = image.shape
+    n_time += 2 * pad_size
+    n_pln += 2 * pad_size
+    n_row += 2 * pad_size
+    n_col += 2 * pad_size
+
+    # Outer loops on patch shifts
+    # With t2 >= 0, reference patch is always on the left of test patch
+    # Iterate over shifts along the plane axis
+    for t_time in range(-d, d + 1):
+        time_dist_min = max(offset, offset - t_time)
+        time_dist_max = min(n_time - offset, n_time - offset - t_time)
+        for t_pln in range(-d, d + 1):
+            pln_dist_min = max(offset, offset - t_pln)
+            pln_dist_max = min(n_pln - offset, n_pln - offset - t_pln)
+            # Iterate over shifts along the row axis
+            for t_row in range(-d, d + 1):
+                row_dist_min = max(offset, offset - t_row)
+                row_dist_max = min(n_row - offset, n_row - offset - t_row)
+                # Iterate over shifts along the column axis
+                for t_col in range(0, d + 1):
+                    col_dist_min = max(offset, offset - t_col)
+                    col_dist_max = min(n_col - offset, n_col - offset - t_col)
+                    # alpha is to account for patches on the same column
+                    # distance is computed twice in this case
+                    if t_col == 0 and ((t_time is not 0) or (t_pln is not 0) or (t_row is not 0)):
+                        alpha = 0.5
+                    else:
+                        alpha = 1.0
+
+                    # Compute integral image of the squared difference between
+                    # padded and the same image shifted by (t_pln, t_row, t_col)
+                    integral = np.zeros_like(padded[..., 0])
+                    _integral_image_4d(padded, integral, t_time, t_pln, t_row, t_col,
+                                       n_time, n_pln, n_row, n_col, n_channels, var)
+
+                    # Inner loops on pixel coordinates
+                    # Iterate over planes, taking offset and shift into account
+                    for time in range(time_dist_min, time_dist_max):
+                        for pln in range(pln_dist_min, pln_dist_max):
+                            # Iterate over rows, taking offset and shift into account
+                            for row in range(row_dist_min, row_dist_max):
+                                # Iterate over columns
+                                for col in range(col_dist_min, col_dist_max):
+                                    # Compute squared distance between shifted patches
+                                    distance = _integral_to_distance_4d(integral,
+                                                time, pln, row, col, offset, s4_h_square)
+                                    # exp of large negative numbers is close to zero
+                                    if distance > DISTANCE_CUTOFF:
+                                        continue
+
+                                    weight = alpha * fast_exp(-distance)
+                                    # Accumulate weights for the different shifts
+                                    weights[time, pln, row, col] += weight
+                                    weights[time + t_time, pln + t_pln,
+                                            row + t_row, col + t_col] += weight
+                                    for channel in range(n_channels):
+                                        result[time, pln, row, col, channel] += weight * \
+                                                padded[time + t_time, pln + t_pln, row + t_row,
+                                                                    col + t_col, channel]
+                                        result[time + t_time, pln + t_pln, row + t_row,
+                                               col + t_col, channel] += weight * \
+                                                              padded[time, pln, row, col, channel]
+
+    # Normalize pixel values using sum of weights of contributing patches
+    for time in range(offset, n_time - offset):
+        for pln in range(offset, n_pln - offset):
+            for row in range(offset, n_row - offset):
+                for col in range(offset, n_col - offset):
+                    for channel in range(n_channels):
+                        # No risk of division by zero, since the contribution
+                        # of a null shift is strictly positive
+                        result[time, pln, row, col, channel] /= weights[time, pln, row, col]
+
+    # Return cropped result, undoing padding
+    return result[pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
