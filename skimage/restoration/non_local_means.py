@@ -137,7 +137,6 @@ def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
     if (ndim_no_channel < 2) or (ndim_no_channel > 4):
         raise NotImplementedError("Non-local means denoising is only \
         implemented for 2D, 3D or 4D grayscale or multichannel images.")
-
     if np.isscalar(patch_distance):
         patch_distance = [patch_distance, ] * ndim_no_channel
     elif len(patch_distance) != ndim_no_channel:
@@ -146,7 +145,6 @@ def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
     patch_distance = np.asarray(patch_distance, dtype=np.intp)
 
     nlm_kwargs = dict(s=patch_size, d=patch_distance, h=h, var=sigma * sigma)
-
     if ndim_no_channel == 2:
         if fast_mode:
             nlm_func = _fast_nl_means_denoising_2d
