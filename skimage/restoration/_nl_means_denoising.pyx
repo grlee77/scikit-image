@@ -696,8 +696,8 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
                                  (pad_size, pad_size), (0, 0)),
                                 mode='reflect').astype(np.float64))
     cdef IMGDTYPE [:, :, :, ::1] result = np.zeros_like(padded)
-    cdef IMGDTYPE [:, :, ::1] weights = np.zeros_like(padded)
-    cdef IMGDTYPE [:, :, ::1] integral = np.zeros_like(padded)
+    cdef IMGDTYPE [:, :, ::1] weights = np.zeros_like(padded[..., 0])
+    cdef IMGDTYPE [:, :, ::1] integral = np.zeros_like(padded[..., 0])
     cdef int n_pln, n_row, n_col, t_pln, t_row, t_col, \
              pln, row, col, ch, n_ch
     cdef int pln_dist_min, pln_dist_max, row_dist_min, row_dist_max, \
@@ -735,7 +735,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
 
                 # Compute integral image of the squared difference between
                 # padded and the same image shifted by (t_pln, t_row, t_col)
-                integral = np.zeros_like(padded)
+                integral = np.zeros_like(padded[..., 0])
                 _integral_image_3d(padded, integral, t_pln, t_row, t_col,
                                    n_pln, n_row, n_col, n_ch, var)
 
