@@ -691,7 +691,8 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
     # + 1 for the boundary effects in finite differences
     cdef int pad_size = offset + d + 1
     cdef IMGDTYPE [:, :, :, ::1] padded = np.ascontiguousarray(np.pad(image,
-                                (((pad_size, pad_size), )*3 + (0, 0)),
+                                ((pad_size, pad_size), (pad_size, pad_size),
+                                 (pad_size, pad_size), (0, 0)),
                                 mode='reflect').astype(np.float64))
     cdef IMGDTYPE [:, :, :, ::1] result = np.zeros_like(padded)
     cdef IMGDTYPE [:, :, ::1] weights = np.zeros_like(padded)
