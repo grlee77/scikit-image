@@ -604,7 +604,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
                 alpha = 1.
             # Compute integral image of the squared difference between
             # padded and the same image shifted by (t_row, t_col)
-            integral = np.zeros_like(padded[..., 0], order='C')
+            integral[:] = 0
             _integral_image_2d(padded, integral, t_row, t_col,
                                n_row, n_col, n_ch, var)
 
@@ -728,7 +728,7 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
 
                 # Compute integral image of the squared difference between
                 # padded and the same image shifted by (t_pln, t_row, t_col)
-                integral = np.zeros_like(padded)
+                integral[:] = 0
                 _integral_image_3d(padded, integral, t_pln, t_row, t_col,
                                    n_pln, n_row, n_col, var)
 
