@@ -6,6 +6,7 @@
 import numpy as np
 cimport numpy as np
 cimport cython
+from cython.parallel import parallel, prange
 
 ctypedef np.float64_t IMGDTYPE
 
@@ -17,7 +18,8 @@ cdef extern from "fast_exp.h":
 
 cdef inline double patch_distance_2d(IMGDTYPE [:, :] p1,
                                      IMGDTYPE [:, :] p2,
-                                     IMGDTYPE [:, ::] w, int s, double var):
+                                     IMGDTYPE [:, ::] w, int s,
+                                     double var) nogil:
     """
     Compute a Gaussian distance between two image patches.
 
@@ -67,7 +69,8 @@ cdef inline double patch_distance_2d(IMGDTYPE [:, :] p1,
 
 cdef inline double patch_distance_2drgb(IMGDTYPE [:, :, :] p1,
                                         IMGDTYPE [:, :, :] p2,
-                                        IMGDTYPE [:, ::] w, int s, double var):
+                                        IMGDTYPE [:, ::] w, int s,
+                                        double var) nogil:
     """
     Compute a Gaussian distance between two image patches.
 
@@ -115,7 +118,8 @@ cdef inline double patch_distance_2drgb(IMGDTYPE [:, :, :] p1,
 
 cdef inline double patch_distance_3d(IMGDTYPE [:, :, :] p1,
                                      IMGDTYPE [:, :, :] p2,
-                                     IMGDTYPE [:, :, ::] w, int s, double var):
+                                     IMGDTYPE [:, :, ::] w, int s,
+                                     double var) nogil:
     """
     Compute a Gaussian distance between two image patches.
 
@@ -369,7 +373,8 @@ def _nl_means_denoising_3d(image, int s=7, int d=13, double h=0.1,
 
 
 cdef inline double _integral_to_distance_2d(IMGDTYPE [:, ::] integral, int row,
-                                            int col, int offset, double h2s2):
+                                            int col, int offset,
+                                            double h2s2) nogil:
     """
     References
     ----------
@@ -395,7 +400,7 @@ cdef inline double _integral_to_distance_2d(IMGDTYPE [:, ::] integral, int row,
 cdef inline double _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
                                             int pln, int row, int col,
                                             int offset,
-                                            double s_cube_h_square):
+                                            double s_cube_h_square) nogil:
     """
     References
     ----------
@@ -422,10 +427,10 @@ cdef inline double _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
     return distance
 
 
-cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
-                               IMGDTYPE [:, ::] integral, int t_row,
-                               int t_col, int n_row, int n_col, int n_ch,
-                               double var):
+cdef inline int _integral_image_2d(IMGDTYPE [:, :, ::] padded,
+                                   IMGDTYPE [:, ::] integral, int t_row,
+                                   int t_col, int n_row, int n_col, int n_ch,
+                                   double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_row, t_col)``.
@@ -475,13 +480,14 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
                                  integral[row - 1, col] + \
                                  integral[row, col - 1] - \
                                  integral[row - 1, col - 1]
+    return 0
 
 
-cdef inline _integral_image_3d(IMGDTYPE [:, :, ::] padded,
-                               IMGDTYPE [:, :, ::] integral, int t_pln,
-                               int t_row, int t_col, int n_pln, int n_row,
-                               int n_col,
-                               double var):
+cdef inline int _integral_image_3d(IMGDTYPE [:, :, ::] padded,
+                                   IMGDTYPE [:, :, ::] integral, int t_pln,
+                                   int t_row, int t_col, int n_pln, int n_row,
+                                   int n_col,
+                                   double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_pln, t_row, t_col)``.
@@ -530,6 +536,7 @@ cdef inline _integral_image_3d(IMGDTYPE [:, :, ::] padded,
                      integral[pln - 1, row - 1, col] -
                      integral[pln, row - 1, col - 1] -
                      integral[pln - 1, row, col - 1])
+    return 0
 
 
 def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
@@ -687,10 +694,10 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
     # + 1 for the boundary effects in finite differences
     cdef int pad_size = offset + d + 1
     cdef IMGDTYPE [:, :, ::1] padded = np.ascontiguousarray(np.pad(image,
-                                pad_size, mode='reflect').astype(np.float64))
+                                pad_size, mode='reflect'), dtype=np.float64)
     cdef IMGDTYPE [:, :, ::1] result = np.zeros_like(padded)
     cdef IMGDTYPE [:, :, ::1] weights = np.zeros_like(padded)
-    cdef IMGDTYPE [:, :, ::1] integral = np.zeros_like(padded)
+    cdef IMGDTYPE [:, :, ::1] integral = np.empty_like(padded)
     cdef int n_pln, n_row, n_col, t_pln, t_row, t_col, \
              pln, row, col
     cdef int pln_dist_min, pln_dist_max, row_dist_min, row_dist_max, \
@@ -734,29 +741,30 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
 
                 # Inner loops on pixel coordinates
                 # Iterate over planes, taking offset and shift into account
-                for pln in range(pln_dist_min, pln_dist_max):
-                    # Iterate over rows, taking offset and shift into account
-                    for row in range(row_dist_min, row_dist_max):
-                        # Iterate over columns
-                        for col in range(col_dist_min, col_dist_max):
-                            # Compute squared distance between shifted patches
-                            distance = _integral_to_distance_3d(integral,
-                                        pln, row, col, offset, s_cube_h_square)
-                            # exp of large negative numbers is close to zero
-                            if distance > DISTANCE_CUTOFF:
-                                continue
+                with nogil, parallel():
+                    for pln in prange(pln_dist_min, pln_dist_max):
+                        # Iterate over rows, taking offset and shift into account
+                        for row in range(row_dist_min, row_dist_max):
+                            # Iterate over columns
+                            for col in range(col_dist_min, col_dist_max):
+                                # Compute squared distance between shifted patches
+                                distance = _integral_to_distance_3d(integral,
+                                            pln, row, col, offset, s_cube_h_square)
+                                # exp of large negative numbers is close to zero
+                                if distance > DISTANCE_CUTOFF:
+                                    continue
 
-                            weight = alpha * fast_exp(-distance)
-                            # Accumulate weights for the different shifts
-                            weights[pln, row, col] += weight
-                            weights[pln + t_pln, row + t_row,
-                                                 col + t_col] += weight
-                            result[pln, row, col] += weight * \
-                                    padded[pln + t_pln, row + t_row,
-                                                        col + t_col]
-                            result[pln + t_pln, row + t_row,
-                                                col + t_col] += weight * \
-                                                  padded[pln, row, col]
+                                weight = alpha * fast_exp(-distance)
+                                # Accumulate weights for the different shifts
+                                weights[pln, row, col] += weight
+                                weights[pln + t_pln, row + t_row,
+                                                     col + t_col] += weight
+                                result[pln, row, col] += weight * \
+                                        padded[pln + t_pln, row + t_row,
+                                                            col + t_col]
+                                result[pln + t_pln, row + t_row,
+                                                    col + t_col] += weight * \
+                                                      padded[pln, row, col]
 
     # Normalize pixel values using sum of weights of contributing patches
     for pln in range(offset, n_pln - offset):
