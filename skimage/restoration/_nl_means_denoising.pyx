@@ -6,6 +6,7 @@
 import numpy as np
 cimport numpy as np
 cimport cython
+from cython.parallel import parallel, prange
 
 ctypedef np.float64_t IMGDTYPE
 
@@ -369,7 +370,7 @@ def _nl_means_denoising_3d(image, int s=7, int d=13, double h=0.1,
 
 
 cdef inline double _integral_to_distance_2d(IMGDTYPE [:, ::] integral, int row,
-                                            int col, int offset, double h2s2):
+                                            int col, int offset, double h2s2) nogil:
     """
     References
     ----------
@@ -395,7 +396,7 @@ cdef inline double _integral_to_distance_2d(IMGDTYPE [:, ::] integral, int row,
 cdef inline double _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
                                             int pln, int row, int col,
                                             int offset,
-                                            double s_cube_h_square):
+                                            double s_cube_h_square) nogil:
     """
     References
     ----------
@@ -425,7 +426,7 @@ cdef inline double _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
 cdef inline double _integral_to_distance_4d(IMGDTYPE [:, :, :, ::] integral,
                                             int time, int pln, int row,
                                             int col, int offset,
-                                            double s4_h_square):
+                                            double s4_h_square) nogil:
     """
     References
     ----------
@@ -1000,33 +1001,34 @@ def _fast_nl_means_denoising_4d(image, int s=5, int d=7, double h=0.1,
                     _integral_image_4d(padded, integral, t_time, t_pln, t_row, t_col,
                                        n_time, n_pln, n_row, n_col, n_channels, var)
 
-                    # Inner loops on pixel coordinates
-                    # Iterate over planes, taking offset and shift into account
-                    for time in range(time_dist_min, time_dist_max):
-                        for pln in range(pln_dist_min, pln_dist_max):
-                            # Iterate over rows, taking offset and shift into account
-                            for row in range(row_dist_min, row_dist_max):
-                                # Iterate over columns
-                                for col in range(col_dist_min, col_dist_max):
-                                    # Compute squared distance between shifted patches
-                                    distance = _integral_to_distance_4d(integral,
-                                                time, pln, row, col, offset, s4_h_square)
-                                    # exp of large negative numbers is close to zero
-                                    if distance > DISTANCE_CUTOFF:
-                                        continue
+                    with nogil, parallel():
+                        # Inner loops on pixel coordinates
+                        # Iterate over planes, taking offset and shift into account
+                        for time in prange(time_dist_min, time_dist_max):
+                            for pln in range(pln_dist_min, pln_dist_max):
+                                # Iterate over rows, taking offset and shift into account
+                                for row in range(row_dist_min, row_dist_max):
+                                    # Iterate over columns
+                                    for col in range(col_dist_min, col_dist_max):
+                                        # Compute squared distance between shifted patches
+                                        distance = _integral_to_distance_4d(integral,
+                                                    time, pln, row, col, offset, s4_h_square)
+                                        # exp of large negative numbers is close to zero
+                                        if distance > DISTANCE_CUTOFF:
+                                            continue
 
-                                    weight = alpha * fast_exp(-distance)
-                                    # Accumulate weights for the different shifts
-                                    weights[time, pln, row, col] += weight
-                                    weights[time + t_time, pln + t_pln,
-                                            row + t_row, col + t_col] += weight
-                                    for channel in range(n_channels):
-                                        result[time, pln, row, col, channel] += weight * \
-                                                padded[time + t_time, pln + t_pln, row + t_row,
-                                                                    col + t_col, channel]
-                                        result[time + t_time, pln + t_pln, row + t_row,
-                                               col + t_col, channel] += weight * \
-                                                              padded[time, pln, row, col, channel]
+                                        weight = alpha * fast_exp(-distance)
+                                        # Accumulate weights for the different shifts
+                                        weights[time, pln, row, col] += weight
+                                        weights[time + t_time, pln + t_pln,
+                                                row + t_row, col + t_col] += weight
+                                        for channel in range(n_channels):
+                                            result[time, pln, row, col, channel] += weight * \
+                                                    padded[time + t_time, pln + t_pln, row + t_row,
+                                                                        col + t_col, channel]
+                                            result[time + t_time, pln + t_pln, row + t_row,
+                                                   col + t_col, channel] += weight * \
+                                                                  padded[time, pln, row, col, channel]
 
     # Normalize pixel values using sum of weights of contributing patches
     for time in range(offset, n_time - offset):
