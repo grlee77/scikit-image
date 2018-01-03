@@ -1031,14 +1031,15 @@ def _fast_nl_means_denoising_4d(image, int s=5, int d=7, double h=0.1,
                                                                   padded[time, pln, row, col, channel]
 
     # Normalize pixel values using sum of weights of contributing patches
-    for time in range(offset, n_time - offset):
-        for pln in range(offset, n_pln - offset):
-            for row in range(offset, n_row - offset):
-                for col in range(offset, n_col - offset):
-                    for channel in range(n_channels):
-                        # No risk of division by zero, since the contribution
-                        # of a null shift is strictly positive
-                        result[time, pln, row, col, channel] /= weights[time, pln, row, col]
+    with nogil, parallel():
+        for time in prange(offset, n_time - offset):
+            for pln in range(offset, n_pln - offset):
+                for row in range(offset, n_row - offset):
+                    for col in range(offset, n_col - offset):
+                        for channel in range(n_channels):
+                            # No risk of division by zero, since the contribution
+                            # of a null shift is strictly positive
+                            result[time, pln, row, col, channel] /= weights[time, pln, row, col]
 
     # Return cropped result, undoing padding
     return result[pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
