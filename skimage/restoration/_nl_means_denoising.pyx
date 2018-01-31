@@ -885,7 +885,6 @@ def _fast_nl_means_denoising_3d(image, int s, np.intp_t [:] d, double h=0.1,
     if len(d) != 3:
         raise ValueError("patch distance, d, must be length 3")
     d_pln, d_row, d_col = d[0], d[1], d[2]
-
     with nogil:
         # Outer loops on patch shifts
         # With t2 >= 0, reference patch is always on the left of test patch
@@ -1030,7 +1029,6 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
     if len(d) != 4:
         raise ValueError("patch distance, d, must be length 4")
     d_time, d_pln, d_row, d_col, = d[0], d[1], d[2], d[3]
-
     # Outer loops on patch shifts
     # With t2 >= 0, reference patch is always on the left of test patch
     # Iterate over shifts along the plane axis
