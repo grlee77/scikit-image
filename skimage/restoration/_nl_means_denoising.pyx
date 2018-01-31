@@ -525,15 +525,15 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
     for row in range(max(1, -t_row), min(n_row, n_row - t_row)):
         for col in range(max(1, -t_col), min(n_col, n_col - t_col)):
             if n_channels == 1:
-                t = padded[row, col, 0] - padded[row + t_row, col + t_col, 0]
-                distance = t * t - 2 * var
+                t = padded[row, col, 0] -padded[row + t_row, col + t_col, 0]
+                distance = t * t
             else:
                 distance = 0
                 for channel in range(n_channels):
                     t = (padded[row, col, channel] -
                          padded[row + t_row, col + t_col, channel])
                     distance += t * t
-                distance -= n_channels * var
+            distance -= 2 * n_channels * var
             integral[row, col] = distance + \
                                  integral[row - 1, col] + \
                                  integral[row, col - 1] - \
@@ -773,7 +773,7 @@ def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
                                      min(n_col - offset, n_col - offset - t_col)):
                         # Compute squared distance between shifted patches
                         distance = _integral_to_distance_2d(integral, row, col,
-                                                         offset, h2s2)
+                                                            offset, h2s2)
                         # exp of large negative numbers is close to zero
                         if distance > DISTANCE_CUTOFF:
                             continue
@@ -857,8 +857,8 @@ def _fast_nl_means_denoising_3d(image, int s=5, int d=7, double h=0.1,
     cdef double alpha
     cdef double h_square = h * h
     cdef double s_cube = s * s * s
-    cdef double s_cube_h_square = h_square * s_cube
     n_pln, n_row, n_col, n_channels = image.shape
+    cdef double s_cube_h_square = n_channels * h_square * s_cube
     n_pln += 2 * pad_size
     n_row += 2 * pad_size
     n_col += 2 * pad_size
@@ -989,8 +989,8 @@ def _fast_nl_means_denoising_4d(image, int s=5, int d=7, double h=0.1,
     cdef double alpha
     cdef double h_square = h * h
     cdef double s4 = s * s * s * s
-    cdef double s4_h_square = h_square * s4
     n_time, n_pln, n_row, n_col, n_channels = image.shape
+    cdef double s4_h_square = n_channels * h_square * s4
     n_time += 2 * pad_size
     n_pln += 2 * pad_size
     n_row += 2 * pad_size
