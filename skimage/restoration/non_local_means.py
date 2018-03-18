@@ -145,6 +145,7 @@ def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
     patch_distance = np.asarray(patch_distance, dtype=np.intp)
 
     nlm_kwargs = dict(s=patch_size, d=patch_distance, h=h, var=sigma * sigma)
+
     if ndim_no_channel == 2:
         if fast_mode:
             nlm_func = _fast_nl_means_denoising_2d

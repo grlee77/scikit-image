@@ -693,7 +693,7 @@ cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
                          integral[time - 1, pln - 1, row - 1, col - 1])
 
 
-def _fast_nl_means_denoising_2d(image, int s=7, int d=13, double h=0.1,
+def _fast_nl_means_denoising_2d(image, int s, np.intp_t [:] d, double h=0.1,
                                 double var=0.):
     """
     Perform fast non-local means denoising on 2-D array, with the outer
