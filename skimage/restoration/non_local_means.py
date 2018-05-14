@@ -5,6 +5,7 @@ from ._nl_means_denoising import (
     _fast_nl_means_denoising_2d,
     _fast_nl_means_denoising_3d,
     _fast_nl_means_denoising_4d)
+from skimage._shared.utils import warn
 
 
 def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
