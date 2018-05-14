@@ -199,18 +199,18 @@ def _nl_means_denoising_2d(image, int s, np.intp_t [:] d, double h=0.1,
     cdef int row, col, i, j, channel
     cdef int row_start, row_end, col_start, col_end
     cdef int row_start_i, row_end_i, col_start_j, col_end_j
-    cdef IMGDTYPE [::1] new_values = np.zeros(n_channels).astype(np.float64)
+    cdef IMGDTYPE [::1] new_values = np.zeros(n_channels, dtype=np.float64)
     cdef IMGDTYPE [:, :, ::1] padded = np.ascontiguousarray(np.pad(image,
                        ((offset, offset), (offset, offset), (0, 0)),
-                        mode='reflect').astype(np.float64))
+                        mode='reflect'), dtype=np.float64)
     cdef IMGDTYPE [:, :, ::1] result = padded.copy()
     cdef double A = ((s - 1.) / 4.)
     cdef double new_value
     cdef double weight_sum, weight
     xg_row, xg_col = np.mgrid[-offset:offset + 1, -offset:offset + 1]
-    cdef IMGDTYPE [:, ::1] w = np.ascontiguousarray(np.exp(
-                             -(xg_row * xg_row + xg_col * xg_col) / (2 * A * A)).
-                             astype(np.float64))
+    cdef IMGDTYPE [:, ::1] w = np.ascontiguousarray(
+        np.exp(-(xg_row * xg_row + xg_col * xg_col) / (2 * A * A)),
+        dtype=np.float64)
     cdef double distance
     w = 1. / (n_channels * np.sum(w) * h * h) * w
 
@@ -307,9 +307,8 @@ def _nl_means_denoising_3d(image, int s, np.intp_t [:] d, double h=0.1,
     n_pln, n_row, n_col = image.shape
     cdef int offset = s / 2
     # padd the image so that boundaries are denoised as well
-    cdef IMGDTYPE [:, :, ::1] padded = np.ascontiguousarray(np.pad(
-                                        image.astype(np.float64),
-                                        offset, mode='reflect'))
+    cdef IMGDTYPE [:, :, ::1] padded = np.ascontiguousarray(
+        np.pad(image, offset, mode='reflect'), dtype=np.float64)
     cdef IMGDTYPE [:, :, ::1] result = padded.copy()
     cdef double A = ((s - 1.) / 4.)
     cdef double new_value
@@ -320,7 +319,7 @@ def _nl_means_denoising_3d(image, int s, np.intp_t [:] d, double h=0.1,
     cdef IMGDTYPE [:, :, ::1] w = np.ascontiguousarray(np.exp(
                             -(xg_pln * xg_pln + xg_row * xg_row +
                               xg_col * xg_col) /
-                             (2 * A * A)).astype(np.float64))
+                             (2 * A * A)), dtype=np.float64)
     cdef double distance
     cdef int pln, row, col, i, j, k
     cdef int pln_start, pln_end, row_start, row_end, col_start, col_end
@@ -739,7 +738,7 @@ def _fast_nl_means_denoising_2d(image, int s, np.intp_t [:] d, double h=0.1,
                           ((pad_size_row, pad_size_row),
                            (pad_size_col, pad_size_col),
                            (0, 0)),
-                          mode='reflect').astype(np.float64))
+                          mode='reflect'), dtype=np.float64)
     cdef IMGDTYPE [:, :, ::1] result = np.zeros_like(padded)
     cdef IMGDTYPE [:, ::1] weights = np.zeros_like(padded[..., 0], order='C')
     cdef IMGDTYPE [:, ::1] integral = np.empty_like(padded[..., 0], order='C')
@@ -862,7 +861,7 @@ def _fast_nl_means_denoising_3d(image, int s, np.intp_t [:] d, double h=0.1,
                                  (pad_size_row, pad_size_row),
                                  (pad_size_col, pad_size_col),
                                  (0, 0)),
-                                mode='reflect').astype(np.float64))
+                                mode='reflect'), dtype=np.float64)
     cdef IMGDTYPE [:, :, :, ::1] result = np.zeros_like(padded)
     cdef IMGDTYPE [:, :, ::1] weights = np.zeros_like(padded[..., 0])
     cdef IMGDTYPE [:, :, ::1] integral = np.empty_like(padded[..., 0])
@@ -1006,7 +1005,7 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
                                  (pad_size_row, pad_size_row),
                                  (pad_size_col, pad_size_col),
                                  (0, 0)),
-                                mode='reflect').astype(np.float64))
+                                mode='reflect'), dtype=np.float64)
     cdef IMGDTYPE [:, :, :, :, ::1] result = np.zeros_like(padded)
     cdef IMGDTYPE [:, :, :, ::1] weights = np.zeros_like(padded[..., 0])
     cdef IMGDTYPE [:, :, :, ::1] integral = np.zeros_like(padded[..., 0])
