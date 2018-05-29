@@ -52,13 +52,14 @@ cdef inline double patch_distance_2d(IMGDTYPE [:, :] p1,
     if init > 1:
         return 0.
     cdef double distance = 0
+    var *= 2.0
     for i in range(s):
         # exp of large negative numbers will be 0, so we'd better stop
         if distance > DISTANCE_CUTOFF:
             return 0.
         for j in range(s):
             tmp_diff = p1[i, j] - p2[i, j]
-            distance += w[i, j] * (tmp_diff * tmp_diff - 2 * var)
+            distance += w[i, j] * (tmp_diff * tmp_diff - var)
     distance = max(distance, 0)
     distance = fast_exp(-distance)
     return distance
@@ -101,6 +102,7 @@ cdef inline double patch_distance_2dmultichannel(IMGDTYPE [:, :, :] p1,
     cdef int i, j, channel
     cdef double tmp_diff = 0
     cdef double distance = 0
+    var *= 2.0
     for i in range(s):
         # exp of large negative numbers will be 0, so we'd better stop
         if distance > DISTANCE_CUTOFF:
@@ -108,7 +110,7 @@ cdef inline double patch_distance_2dmultichannel(IMGDTYPE [:, :, :] p1,
         for j in range(s):
             for channel in range(n_channels):
                 tmp_diff = p1[i, j, channel] - p2[i, j, channel]
-                distance += w[i, j] * (tmp_diff * tmp_diff - 2 * var)
+                distance += w[i, j] * (tmp_diff * tmp_diff - var)
     distance = max(distance, 0)
     distance = fast_exp(-distance)
     return distance
@@ -147,6 +149,7 @@ cdef inline double patch_distance_3d(IMGDTYPE [:, :, :] p1,
     cdef int i, j, k
     cdef double distance = 0
     cdef double tmp_diff
+    var *= 2.0
     for i in range(s):
         # exp of large negative numbers will be 0, so we'd better stop
         if distance > DISTANCE_CUTOFF:
@@ -154,7 +157,7 @@ cdef inline double patch_distance_3d(IMGDTYPE [:, :, :] p1,
         for j in range(s):
             for k in range(s):
                 tmp_diff = p1[i, j, k] - p2[i, j, k]
-                distance += w[i, j, k] * (tmp_diff * tmp_diff - 2 * var)
+                distance += w[i, j, k] * (tmp_diff * tmp_diff - var)
     distance = max(distance, 0.0)
     distance = fast_exp(-distance)
     return distance
@@ -536,7 +539,7 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
                     t = (padded[row, col, channel] -
                          padded[row + t_row, col + t_col, channel])
                     distance += t * t
-            distance -= 2 * n_channels * var
+            distance -= n_channels * var
             integral[row, col] = distance + \
                                  integral[row - 1, col] + \
                                  integral[row, col - 1] - \
@@ -596,7 +599,7 @@ cdef inline void _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
                              padded[pln + t_pln, row + t_row, col + t_col,
                                     channel])
                         distance += d * d
-                distance -= 2 * n_channels * var
+                distance -= n_channels * var
                 integral[pln, row, col] = \
                     (distance +
                      integral[pln - 1, row, col] +
@@ -650,6 +653,7 @@ cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
     """
     cdef int time, pln, row, col, channel
     cdef double distance, d
+    var *= 2.0
     for time in range(max(1, -t_time), min(n_time, n_time - t_time)):
         for pln in range(max(1, -t_pln), min(n_pln, n_pln - t_pln)):
             for row in range(max(1, -t_row), min(n_row, n_row - t_row)):
@@ -666,7 +670,7 @@ cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
                                  padded[time + t_time, pln + t_pln,
                                  row + t_row, col + t_col, channel])
                             distance += d * d
-                    distance -= 2 * n_channels * var
+                    distance -= n_channels * var
 
                     integral[time, pln, row, col] = \
                         (distance +
