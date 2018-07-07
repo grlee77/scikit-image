@@ -94,6 +94,7 @@ install:
     - pip list
     - echo "QT_API=${QT_API} QT=${QT}"
     - cat ${MPL_DIR}/matplotlibrc
+    - python -c "import matplotlib; print(matplotlib.rcParams['backend'], matplotlib.rcParams['backend.qt5'])"
 
 script: tools/travis/script.sh
 
