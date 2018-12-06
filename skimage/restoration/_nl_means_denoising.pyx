@@ -447,7 +447,7 @@ cdef inline double _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
 cdef inline double _integral_to_distance_4d(IMGDTYPE [:, :, :, ::] integral,
                                             int time, int pln, int row,
                                             int col, int offset,
-                                            double s4_h_square):
+                                            double s4_h_square) nogil:
     """
     References
     ----------
@@ -491,10 +491,10 @@ cdef inline double _integral_to_distance_4d(IMGDTYPE [:, :, :, ::] integral,
     return distance
 
 
-cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
-                               IMGDTYPE [:, ::] integral, int t_row,
-                               int t_col, int n_row, int n_col, int n_channels,
-                               double var):
+cdef inline void _integral_image_2d(IMGDTYPE [:, :, ::] padded,
+                                    IMGDTYPE [:, ::] integral, int t_row,
+                                    int t_col, int n_row, int n_col, int n_channels,
+                                    double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_row, t_col)``.
@@ -616,7 +616,7 @@ cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
                                     int t_time, int t_pln, int t_row,
                                     int t_col, int n_time, int n_pln,
                                     int n_row, int n_col, int n_channels,
-                                    double var):
+                                    double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_pln, t_row, t_col)``.
