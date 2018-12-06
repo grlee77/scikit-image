@@ -444,16 +444,10 @@ cdef inline double _integral_to_distance_3d(IMGDTYPE [:, :, ::] integral,
     return distance
 
 
-<<<<<<< HEAD
-cdef inline void _integral_image_2d(IMGDTYPE [:, :, ::] padded,
-                                    IMGDTYPE [:, ::] integral, int t_row,
-                                    int t_col, int n_row, int n_col,
-                                    int n_channels, double var) nogil:
-=======
 cdef inline double _integral_to_distance_4d(IMGDTYPE [:, :, :, ::] integral,
                                             int time, int pln, int row,
                                             int col, int offset,
-                                            double s4_h_square):
+                                            double s4_h_square) nogil:
     """
     References
     ----------
@@ -497,10 +491,10 @@ cdef inline double _integral_to_distance_4d(IMGDTYPE [:, :, :, ::] integral,
     return distance
 
 
-cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
-                               IMGDTYPE [:, ::] integral, int t_row,
-                               int t_col, int n_row, int n_col, int n_channels,
-                               double var):
+cdef inline void _integral_image_2d(IMGDTYPE [:, :, ::] padded,
+                                    IMGDTYPE [:, ::] integral, int t_row,
+                                    int t_col, int n_row, int n_col, int n_channels,
+                                    double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_row, t_col)``.
@@ -552,11 +546,11 @@ cdef inline _integral_image_2d(IMGDTYPE [:, :, ::] padded,
                                  integral[row - 1, col - 1]
 
 
-cdef inline _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
-                               IMGDTYPE [:, :, ::] integral, int t_pln,
-                               int t_row, int t_col, int n_pln, int n_row,
-                               int n_col, int n_channels,
-                               double var) nogil:
+cdef inline void _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
+                                    IMGDTYPE [:, :, ::] integral, int t_pln,
+                                    int t_row, int t_col, int n_pln, int n_row,
+                                    int n_col, int n_channels,
+                                    double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_pln, t_row, t_col)``.
@@ -617,11 +611,11 @@ cdef inline _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
                      integral[pln - 1, row, col - 1])
 
 
-cdef inline _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
-                               IMGDTYPE [:, :, :, ::] integral, int t_time,
-                               int t_pln, int t_row, int t_col, int n_time,
-                               int n_pln, int n_row, int n_col, int n_channels,
-                               double var):
+cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
+                                    IMGDTYPE [:, :, :, ::] integral, int t_time,
+                                    int t_pln, int t_row, int t_col, int n_time,
+                                    int n_pln, int n_row, int n_col, int n_channels,
+                                    double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
     and the same image shifted by ``(t_pln, t_row, t_col)``.
@@ -781,7 +775,7 @@ def _fast_nl_means_denoising_2d(image, int s, np.intp_t [:] d, double h=0.1,
                     alpha = 1.
                 # Compute integral image of the squared difference between
                 # padded and the same image shifted by (t_row, t_col)
-                integral = np.zeros_like(padded[..., 0], order='C')
+                integral[:, :] = 0
                 _integral_image_2d(padded, integral, t_row, t_col,
                                    n_row, n_col, n_channels, var)
 
@@ -917,7 +911,7 @@ def _fast_nl_means_denoising_3d(image, int s, np.intp_t [:] d, double h=0.1,
 
                     # Compute integral image of the squared difference between
                     # padded and the same image shifted by (t_pln, t_row, t_col)
-                    integral = np.zeros_like(padded[..., 0])
+                    integral[:, :, :] = 0
                     _integral_image_3d(padded, integral, t_pln, t_row, t_col,
                                        n_pln, n_row, n_col, n_channels, var)
 
@@ -1064,7 +1058,7 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
 
                     # Compute integral image of the squared difference between
                     # padded and the same image shifted by (t_pln, t_row, t_col)
-                    integral = np.zeros_like(padded[..., 0])
+                    integral[:, :, :, :] = 0
                     _integral_image_4d(padded, integral, t_time, t_pln, t_row, t_col,
                                        n_time, n_pln, n_row, n_col, n_channels, var)
 
