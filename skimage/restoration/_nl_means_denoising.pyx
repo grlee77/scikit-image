@@ -612,9 +612,10 @@ cdef inline void _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
 
 
 cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
-                                    IMGDTYPE [:, :, :, ::] integral, int t_time,
-                                    int t_pln, int t_row, int t_col, int n_time,
-                                    int n_pln, int n_row, int n_col, int n_channels,
+                                    IMGDTYPE [:, :, :, ::] integral,
+                                    int t_time, int t_pln, int t_row,
+                                    int t_col, int n_time, int n_pln,
+                                    int n_row, int n_col, int n_channels,
                                     double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
@@ -659,8 +660,8 @@ cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
                 for col in range(max(1, -t_col), min(n_col, n_col - t_col)):
                     if n_channels == 1:
                         d = (padded[time, pln, row, col, 0] -
-                                    padded[time + t_time, pln + t_pln,
-                                           row + t_row, col + t_col, 0])
+                             padded[time + t_time, pln + t_pln,
+                                    row + t_row, col + t_col, 0])
                         distance = d * d
                     else:
                         distance = 0
@@ -687,7 +688,7 @@ cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
                          integral[time, pln, row - 1, col - 1] -
                          integral[time, pln - 1, row, col - 1] -
                          integral[time, pln - 1, row - 1, col] -
-                         integral[time - 1, pln, row, col - 1]  -
+                         integral[time - 1, pln, row, col - 1] -
                          integral[time - 1, pln, row - 1, col] -
                          integral[time - 1, pln - 1, row, col] -
                          # subtract term with shift along 4 axes
@@ -1059,8 +1060,9 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
                     # Compute integral image of the squared difference between
                     # padded and the same image shifted by (t_pln, t_row, t_col)
                     integral[:, :, :, :] = 0
-                    _integral_image_4d(padded, integral, t_time, t_pln, t_row, t_col,
-                                       n_time, n_pln, n_row, n_col, n_channels, var)
+                    _integral_image_4d(padded, integral, t_time, t_pln, t_row,
+                                       t_col, n_time, n_pln, n_row, n_col,
+                                       n_channels, var)
 
                     # Inner loops on pixel coordinates
                     # Iterate over planes, taking offset and shift into account
@@ -1071,8 +1073,9 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
                                 # Iterate over columns
                                 for col in range(col_dist_min, col_dist_max):
                                     # Compute squared distance between shifted patches
-                                    distance = _integral_to_distance_4d(integral,
-                                                time, pln, row, col, offset, s4_h_square)
+                                    distance = _integral_to_distance_4d(
+                                        integral, time, pln, row, col, offset,
+                                        s4_h_square)
                                     # exp of large negative numbers is close to zero
                                     if distance > DISTANCE_CUTOFF:
                                         continue
@@ -1083,12 +1086,17 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
                                     weights[time + t_time, pln + t_pln,
                                             row + t_row, col + t_col] += weight
                                     for channel in range(n_channels):
-                                        result[time, pln, row, col, channel] += weight * \
-                                                padded[time + t_time, pln + t_pln, row + t_row,
-                                                                    col + t_col, channel]
-                                        result[time + t_time, pln + t_pln, row + t_row,
-                                               col + t_col, channel] += weight * \
-                                                              padded[time, pln, row, col, channel]
+                                        result[time, pln, row, col,
+                                               channel] += weight * \
+                                                   padded[time + t_time,
+                                                          pln + t_pln,
+                                                          row + t_row,
+                                                          col + t_col, channel]
+                                        result[time + t_time, pln + t_pln,
+                                               row + t_row, col + t_col,
+                                               channel] += weight * \
+                                                   padded[time, pln, row,
+                                                          col, channel]
 
     # Normalize pixel values using sum of weights of contributing patches
     for time in range(offset, n_time - offset):
@@ -1098,11 +1106,11 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
                     for channel in range(n_channels):
                         # No risk of division by zero, since the contribution
                         # of a null shift is strictly positive
-                        result[time, pln, row, col, channel] /= weights[time, pln, row, col]
+                        result[time, pln, row, col, channel] /= weights[
+                            time, pln, row, col]
 
     # Return cropped result, undoing padding
     return result[pad_size_time:-pad_size_time,
                   pad_size_pln:-pad_size_pln,
                   pad_size_row:-pad_size_row,
                   pad_size_col:-pad_size_col]
-
