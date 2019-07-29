@@ -9,7 +9,7 @@ from ..util import img_as_float
 from ._warnings import all_warnings, warn
 
 __all__ = ['deprecated', 'get_bound_method_class', 'all_warnings',
-           'safe_as_int', 'assert_nD', 'warn']
+           'safe_as_int', 'assert_nD', 'warn', 'abs_squared']
 
 
 class skimage_deprecation(Warning):
@@ -240,3 +240,25 @@ def convert_to_float(image, preserve_range):
     else:
         image = img_as_float(image)
     return image
+
+
+def abs_squared(x):
+    """Squared magnitude of x.
+
+    More efficient implementation of np.abs(x) ** 2.
+
+    Parameters
+    ----------
+    x : ndarray
+        Input array.
+
+    Returns
+    -------
+    sq : ndarray
+        The squared magnitude of ``x``.
+    """
+    if x.dtype.kind == 'c':
+        sq = x.real * x.real
+        sq += x.imag * x.imag
+        return sq
+    return x * x

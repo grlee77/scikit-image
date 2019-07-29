@@ -4,6 +4,7 @@ http://www.mathworks.com/matlabcentral/fileexchange/18401-efficient-subpixel-ima
 """
 
 import numpy as np
+from .._shared.utils import abs_squared
 
 
 def _upsampled_dft(data, upsampled_region_size,
@@ -186,8 +187,8 @@ def register_translation(src_image, target_image, upsample_factor=1,
 
     if upsample_factor == 1:
         if return_error:
-            src_amp = np.sum(np.abs(src_freq) ** 2) / src_freq.size
-            target_amp = np.sum(np.abs(target_freq) ** 2) / target_freq.size
+            src_amp = np.sum(abs_squared(src_freq)) / src_freq.size
+            target_amp = np.sum(abs_squared(target_freq)) / target_freq.size
             CCmax = cross_correlation[maxima]
     # If upsampling > 1, then refine estimate with matrix multiply DFT
     else:
@@ -197,7 +198,7 @@ def register_translation(src_image, target_image, upsample_factor=1,
         # Center of output array at dftshift + 1
         dftshift = np.fix(upsampled_region_size / 2.0)
         upsample_factor = np.array(upsample_factor, dtype=np.float64)
-        normalization = (src_freq.size * upsample_factor ** 2)
+        normalization = (src_freq.size * upsample_factor * upsample_factor)
         # Matrix multiply DFT around the current shift estimate
         sample_region_offset = dftshift - shifts*upsample_factor
         cross_correlation = _upsampled_dft(image_product.conj(),
