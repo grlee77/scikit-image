@@ -532,7 +532,7 @@ cdef inline void _integral_image_2d(IMGDTYPE [:, :, ::] padded,
         for col in range(max(1, -t_col), min(n_col, n_col - t_col)):
             if n_channels == 1:
                 t = padded[row, col, 0] - padded[row + t_row, col + t_col, 0]
-                distance = t * t - var
+                distance = t * t
             else:
                 distance = 0
                 for channel in range(n_channels):
@@ -612,9 +612,10 @@ cdef inline void _integral_image_3d(IMGDTYPE [:, :, :, ::] padded,
 
 
 cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
-                                    IMGDTYPE [:, :, :, ::] integral, int t_time,
-                                    int t_pln, int t_row, int t_col, int n_time,
-                                    int n_pln, int n_row, int n_col, int n_channels,
+                                    IMGDTYPE [:, :, :, ::] integral,
+                                    int t_time, int t_pln, int t_row,
+                                    int t_col, int n_time, int n_pln,
+                                    int n_row, int n_col, int n_channels,
                                     double var) nogil:
     """
     Computes the integral of the squared difference between an image ``padded``
@@ -660,16 +661,17 @@ cdef inline void _integral_image_4d(IMGDTYPE [:, :, :, :, ::] padded,
                     if n_channels == 1:
                         d = (padded[time, pln, row, col, 0] -
                              padded[time + t_time, pln + t_pln,
-                             row + t_row, col + t_col, 0])
+                                    row + t_row, col + t_col, 0])
                         distance = d * d
                     else:
                         distance = 0
                         for channel in range(n_channels):
                             d = (padded[time, pln, row, col, channel] -
                                  padded[time + t_time, pln + t_pln,
-                                 row + t_row, col + t_col, channel])
+                                        row + t_row, col + t_col, channel])
                             distance += d * d
                     distance -= n_channels * var
+
                     integral[time, pln, row, col] = \
                         (distance +
                          # add terms with shift along 1 axis
@@ -885,6 +887,7 @@ def _fast_nl_means_denoising_3d(image, int s, np.intp_t [:] d, double h=0.1,
     if len(d) != 3:
         raise ValueError("patch distance, d, must be length 3")
     d_pln, d_row, d_col = d[0], d[1], d[2]
+
     with nogil:
         # Outer loops on patch shifts
         # With t2 >= 0, reference patch is always on the left of test patch
@@ -1029,6 +1032,7 @@ def _fast_nl_means_denoising_4d(image, int s, np.intp_t [:] d, double h=0.1,
     if len(d) != 4:
         raise ValueError("patch distance, d, must be length 4")
     d_time, d_pln, d_row, d_col, = d[0], d[1], d[2], d[3]
+
     # Outer loops on patch shifts
     # With t2 >= 0, reference patch is always on the left of test patch
     # Iterate over shifts along the plane axis
