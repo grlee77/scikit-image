@@ -748,7 +748,7 @@ def _fast_nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image,
                                         pad_size: -pad_size, :]).astype(dtype))
 
 
-def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=3] image,
+def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
                                 Py_ssize_t s=5, Py_ssize_t d=7, double h=0.1,
                                 double var=0.):
     """
@@ -800,7 +800,13 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=3] image,
     # + 1 for the boundary effects in finite differences
     cdef Py_ssize_t pad_size = offset + d + 1
     cdef double [:, :, :, ::1] padded = np.ascontiguousarray(
-        np.pad(image, pad_size, mode='reflect').astype(np.float64))
+        np.pad(image,
+               ((pad_size, pad_size),
+                (pad_size, pad_size),
+                (pad_size, pad_size),
+                (0, 0)),
+               mode='reflect'),
+        dtype=np.float64)
     cdef double [:, :, ::1] weights = np.zeros_like(padded[..., 0])
     cdef double [:, :, ::1] integral = np.empty_like(padded[..., 0])
     cdef double [:, :, :, ::1] result = np.zeros_like(padded)
@@ -895,7 +901,7 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=3] image,
     )
 
 
-def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=4] image,
+def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
                                 Py_ssize_t s=3, Py_ssize_t d=3, double h=0.1,
                                 double var=0.):
     """
