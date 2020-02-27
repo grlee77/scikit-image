@@ -109,7 +109,8 @@ cdef inline np_floats patch_distance_3d(np_floats [:, :, :] p1,
 
 
 def _nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image, Py_ssize_t s=7,
-                           Py_ssize_t d=13, double h=0.1, double var=0.):
+                           Py_ssize_t [:] d=np.asarray([13, 13]), double h=0.1,
+                           double var=0.):
     """
     Perform non-local means denoising on 2-D RGB image
 
@@ -119,8 +120,8 @@ def _nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image, Py_ssize_t s=7,
         Input RGB image to be denoised
     s : Py_ssize_t, optional
         Size of patches used for denoising
-    d : Py_ssize_t, optional
-        Maximal distance in pixels where to search patches used for denoising
+    d : tuple of Py_ssize_t, optional
+        Maximal distance in pixels along each axis to search for patches used for denoising.
     h : np_floats, optional
         Cut-off distance (in gray levels). The higher h, the more permissive
         one is in accepting patches.
@@ -169,14 +170,20 @@ def _nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image, Py_ssize_t s=7,
     w *= 1. / (n_channels * np.sum(w) * h * h)
 
     cdef np_floats [:, :, :] central_patch
+
+    cdef int d_row, d_col
+    if len(d) != 2:
+        raise ValueError("patch distance, d, must be length 2")
+    d_row, d_col = d[0], d[1]
+
     var *= 2
 
     # Iterate over rows, taking padding into account
     with nogil:
         for row in range(n_row):
             # Iterate over columns, taking padding into account
-            i_start = row - min(d, row)
-            i_end = row + min(d + 1, n_row - row)
+            i_start = row - min(d_row, row)
+            i_end = row + min(d_row + 1, n_row - row)
 
             for col in range(n_col):
                 # Initialize per-channel bins
@@ -185,8 +192,8 @@ def _nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image, Py_ssize_t s=7,
                 weight_sum = 0
 
                 central_patch = padded[row:row+s, col:col+s, :]
-                j_start = col - min(d, col)
-                j_end = col + min(d + 1, n_col - col)
+                j_start = col - min(d_col, col)
+                j_end = col + min(d_col + 1, n_col - col)
 
                 # Iterate over local 2d patch for each pixel
                 for i in range(i_start, i_end):
@@ -212,7 +219,8 @@ def _nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image, Py_ssize_t s=7,
 
 
 def _nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=3] image,
-                           Py_ssize_t s=7, Py_ssize_t d=13,
+                           Py_ssize_t s=7,
+                           Py_ssize_t [:] d=np.asarray([7, 7, 7]),
                            double h=0.1, double var=0.0):
     """
     Perform non-local means denoising on 3-D array
@@ -223,8 +231,8 @@ def _nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=3] image,
         Input data to be denoised.
     s : int, optional
         Size of patches used for denoising.
-    d : Py_ssize_t, optional
-        Maximal distance in pixels where to search patches used for denoising.
+    d : tuple of Py_ssize_t, optional
+        Maximal distance in pixels along each axis to search for patches used for denoising.
     h : np_floats, optional
         Cut-off distance (in gray levels).
     var : np_floats
@@ -268,21 +276,27 @@ def _nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=3] image,
     w *= 1. / (np.sum(w) * h * h)
 
     cdef np_floats [:, :, :] central_patch
+
+    cdef int d_row, d_col, d_pln
+    if len(d) != 3:
+        raise ValueError("patch distance, d, must be length 3")
+    d_pln, d_row, d_col = d[0], d[1], d[2]
+
     var *= 2
 
     # Iterate over planes, taking padding into account
     with nogil:
         for pln in range(n_pln):
-            i_start = pln - min(d, pln)
-            i_end = pln + min(d + 1, n_pln - pln)
+            i_start = pln - min(d_pln, pln)
+            i_end = pln + min(d_pln + 1, n_pln - pln)
             # Iterate over rows, taking padding into account
             for row in range(n_row):
-                j_start = row - min(d, row)
-                j_end = row + min(d + 1, n_row - row)
+                j_start = row - min(d_row, row)
+                j_end = row + min(d_row + 1, n_row - row)
                 # Iterate over columns, taking padding into account
                 for col in range(n_col):
-                    k_start = col - min(d, col)
-                    k_end = col + min(d + 1, n_col - col)
+                    k_start = col - min(d_col, col)
+                    k_end = col + min(d_col + 1, n_col - col)
 
                     central_patch = padded[pln:pln+s, row:row+s, col:col+s]
 
@@ -625,7 +639,8 @@ cdef inline void _integral_image_4d(double [:, :, :, :, ::] padded,
 
 
 def _fast_nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image,
-                                Py_ssize_t s=7, Py_ssize_t d=13,
+                                Py_ssize_t s,
+                                Py_ssize_t [:] d=np.asarray([13, 13]),
                                 double h=0.1, double var=0.):
     """
     Perform fast non-local means denoising on 2-D array, with the outer
@@ -637,8 +652,8 @@ def _fast_nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image,
         2-D input data to be denoised, grayscale or RGB.
     s : Py_ssize_t, optional
         Size of patches used for denoising.
-    d : Py_ssize_t, optional
-        Maximal distance in pixels where to search patches used for denoising.
+    d : tuple of Py_ssize_t, optional
+        Maximal distance in pixels along each axis to search for patches used for denoising.
     h : double, optional
         Cut-off distance (in gray levels). The higher h, the more permissive
         one is in accepting patches.
@@ -674,12 +689,14 @@ def _fast_nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image,
     # Image padding: we need to account for patch size, possible shift,
     # + 1 for the boundary effects in finite differences
     cdef Py_ssize_t n_row, n_col, t_row, t_col, row, col, n_channels, channel
+    cdef Py_ssize_t d_row, d_col
     cdef Py_ssize_t row_start, row_end, row_shift, col_shift
     cdef Py_ssize_t offset = s / 2
-    cdef Py_ssize_t pad_size = offset + d + 1
+    cdef Py_ssize_t pad_size_row = offset + d[0] + 1
+    cdef Py_ssize_t pad_size_col = offset + d[1] + 1
 
     cdef double [:, :, ::1] padded = np.ascontiguousarray(
-        np.pad(image, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)),
+        np.pad(image, ((pad_size_row, pad_size_row), (pad_size_col, pad_size_col), (0, 0)),
                mode='reflect').astype(np.float64))
     cdef double [:, ::1] weights = np.zeros_like(padded[..., 0])
     cdef double [:, ::1] integral = np.zeros_like(weights)
@@ -688,13 +705,17 @@ def _fast_nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image,
 
     n_row, n_col, n_channels = padded.shape[0], padded.shape[1], padded.shape[2]
     h2s2 = n_channels * h * h * s * s
-    var *= 2
 
+    if len(d) != 2:
+        raise ValueError("patch distance, d, must be length 2")
+    d_row, d_col = d[0], d[1]
+
+    var *= 2
     with nogil:
         # Outer loops on patch shifts
         # With t2 >= 0, reference patch is always on the left of test patch
         # Iterate over shifts along the row axis
-        for t_row in range(-d, d + 1):
+        for t_row in range(-d_row, d_row + 1):
             # alpha is to account for patches on the same column
             # distance is computed twice in this case
             if t_row != 0:
@@ -704,7 +725,7 @@ def _fast_nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image,
             row_start = max(offset, offset - t_row)
             row_end = min(n_row - offset, n_row - offset - t_row)
             # Iterate over shifts along the column axis
-            for t_col in range(0, d + 1):
+            for t_col in range(0, d_col + 1):
                 # Compute integral image of the squared difference between
                 # padded and the same image shifted by (t_row, t_col)
                 _integral_image_2d(padded, integral, t_row, t_col,
@@ -736,21 +757,22 @@ def _fast_nl_means_denoising_2d(cnp.ndarray[np_floats, ndim=3] image,
                 alpha = 1
 
         # Normalize pixel values using sum of weights of contributing patches
-        for row in range(pad_size, n_row - pad_size):
-            for col in range(pad_size, n_col - pad_size):
+        for row in range(pad_size_row, n_row - pad_size_row):
+            for col in range(pad_size_col, n_col - pad_size_col):
                 for channel in range(n_channels):
                     # No risk of division by zero, since the contribution
                     # of a null shift is strictly positive
                     result[row, col, channel] /= weights[row, col]
 
     # Return cropped result, undoing padding
-    return np.squeeze(np.asarray(result[pad_size: -pad_size,
-                                        pad_size: -pad_size, :]).astype(dtype))
+    return np.squeeze(np.asarray(result[pad_size_row: -pad_size_row,
+                                        pad_size_col: -pad_size_col, :]).astype(dtype))
 
 
 def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
-                                Py_ssize_t s=5, Py_ssize_t d=7, double h=0.1,
-                                double var=0.):
+                                Py_ssize_t s=5,
+                                Py_ssize_t [:] d=np.asarray([7, 7, 7]),
+                                double h=0.1, double var=0.):
     """
     Perform fast non-local means denoising on 3-D array, with the outer
     loop on patch shifts in order to reduce the number of operations.
@@ -761,8 +783,8 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
         3-D input data to be denoised.
     s : Py_ssize_t, optional
         Size of patches used for denoising.
-    d : Py_ssize_t, optional
-        Maximal distance in pixels where to search patches used for denoising.
+    d : tuple of Py_ssize_t, optional
+        Maximal distance in pixels along each axis to search for patches used for denoising.
     h : double, optional
         cut-off distance (in gray levels). The higher h, the more permissive
         one is in accepting patches.
@@ -798,12 +820,14 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
     cdef Py_ssize_t offset = s / 2
     # Image padding: we need to account for patch size, possible shift,
     # + 1 for the boundary effects in finite differences
-    cdef Py_ssize_t pad_size = offset + d + 1
+    cdef Py_ssize_t pad_size_pln = offset + d[0] + 1
+    cdef Py_ssize_t pad_size_row = offset + d[1] + 1
+    cdef Py_ssize_t pad_size_col = offset + d[2] + 1
     cdef double [:, :, :, ::1] padded = np.ascontiguousarray(
         np.pad(image,
-               ((pad_size, pad_size),
-                (pad_size, pad_size),
-                (pad_size, pad_size),
+               ((pad_size_pln, pad_size_pln),
+                (pad_size_row, pad_size_row),
+                (pad_size_col, pad_size_col),
                 (0, 0)),
                mode='reflect'),
         dtype=np.float64)
@@ -813,6 +837,7 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
 
     cdef Py_ssize_t n_pln, n_row, n_col, t_pln, t_row, t_col, \
              pln, row, col, channel, n_channels
+    cdef Py_ssize_t d_row, d_col, d_pln
     cdef Py_ssize_t pln_dist_min, pln_dist_max, row_dist_min, row_dist_max, \
              col_dist_min, col_dist_max
     cdef double weight, distance, alpha
@@ -820,13 +845,17 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
     cdef double s_cube_h_square = n_channels * h * h * s * s * s
 
 
+    if len(d) != 3:
+        raise ValueError("patch distance, d, must be length 3")
+    d_pln, d_row, d_col = d[0], d[1], d[2]
+
     var *= 2
 
     with nogil:
         # Outer loops on patch shifts
         # With t2 >= 0, reference patch is always on the left of test patch
         # Iterate over shifts along the plane axis
-        for t_pln in range(-d, d + 1):
+        for t_pln in range(-d_pln, d_pln + 1):
             pln_dist_min = max(offset, offset - t_pln)
             pln_dist_max = min(n_pln - offset, n_pln - offset - t_pln)
                     # alpha is to account for patches on the same column
@@ -836,7 +865,7 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
             else:
                 alpha = 0.5
             # Iterate over shifts along the row axis
-            for t_row in range(-d, d + 1):
+            for t_row in range(-d_row, d_row + 1):
                 row_dist_min = max(offset, offset - t_row)
                 row_dist_max = min(n_row - offset, n_row - offset - t_row)
                 if t_row == 0:
@@ -844,7 +873,7 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
                 else:
                     alpha = 0.5
                 # Iterate over shifts along the column axis
-                for t_col in range(0, d + 1):
+                for t_col in range(0, d_col + 1):
                     col_dist_min = offset
                     col_dist_max = n_col - offset - t_col
 
@@ -895,15 +924,16 @@ def _fast_nl_means_denoising_3d(cnp.ndarray[np_floats, ndim=4] image,
 
     # Return cropped result, undoing padding
     return np.squeeze(
-        np.asarray(result[pad_size:-pad_size,
-                          pad_size:-pad_size,
-                          pad_size:-pad_size, :], dtype=dtype)
+        np.asarray(result[pad_size_pln:-pad_size_pln,
+                          pad_size_row:-pad_size_row,
+                          pad_size_col:-pad_size_col, :], dtype=dtype)
     )
 
 
 def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
-                                Py_ssize_t s=3, Py_ssize_t d=3, double h=0.1,
-                                double var=0.):
+                                Py_ssize_t s=3,
+                                Py_ssize_t [:] d=np.asarray([3, 3, 3, 3]),
+                                double h=0.1, double var=0.):
     """
     Perform fast non-local means denoising on 3-D array, with the outer
     loop on patch shifts in order to reduce the number of operations.
@@ -951,13 +981,16 @@ def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
     cdef Py_ssize_t offset = s / 2
     # Image padding: we need to account for patch size, possible shift,
     # + 1 for the boundary effects in finite differences
-    cdef Py_ssize_t pad_size = offset + d + 1
+    cdef Py_ssize_t pad_size_time = offset + d[0] + 1
+    cdef Py_ssize_t pad_size_pln = offset + d[1] + 1
+    cdef Py_ssize_t pad_size_row = offset + d[2] + 1
+    cdef Py_ssize_t pad_size_col = offset + d[3] + 1
     cdef double [:, :, :, :, ::1] padded = np.ascontiguousarray(
         np.pad(image,
-               ((pad_size, pad_size),
-                (pad_size, pad_size),
-                (pad_size, pad_size),
-                (pad_size, pad_size),
+               ((pad_size_time, pad_size_time),
+                (pad_size_pln, pad_size_pln),
+                (pad_size_row, pad_size_row),
+                (pad_size_col, pad_size_col),
                 (0, 0)),
                mode='reflect'),
         dtype=np.float64)
@@ -973,12 +1006,16 @@ def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
     n_time, n_pln, n_row, n_col, n_channels = padded.shape[0], padded.shape[1], padded.shape[2], padded.shape[3], padded.shape[4]
     cdef double s4_h_square = n_channels * h * h * s * s * s * s
 
+    if len(d) != 4:
+        raise ValueError("patch distance, d, must be length 4")
+    d_time, d_pln, d_row, d_col, = d[0], d[1], d[2], d[3]
+
     # Outer loops on patch shifts
     # With t2 >= 0, reference patch is always on the left of test patch
     # Iterate over shifts along the plane axis
     var *= 2
     with nogil:
-        for t_time in range(-d, d + 1):
+        for t_time in range(-d_time, d_time + 1):
             time_dist_min = max(offset, offset - t_time)
             time_dist_max = min(n_time - offset, n_time - offset - t_time)
             # alpha is to account for patches on the same column
@@ -987,7 +1024,7 @@ def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
                 alpha = 1.0
             else:
                 alpha = 0.5
-            for t_pln in range(-d, d + 1):
+            for t_pln in range(-d_pln, d_pln + 1):
                 pln_dist_min = max(offset, offset - t_pln)
                 pln_dist_max = min(n_pln - offset, n_pln - offset - t_pln)
                 if t_pln == 0:
@@ -995,7 +1032,7 @@ def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
                 else:
                     alpha = 0.5
                 # Iterate over shifts along the row axis
-                for t_row in range(-d, d + 1):
+                for t_row in range(-d_row, d_row + 1):
                     row_dist_min = max(offset, offset - t_row)
                     row_dist_max = min(n_row - offset, n_row - offset - t_row)
                     if t_row == 0:
@@ -1003,7 +1040,7 @@ def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
                     else:
                         alpha = 0.5
                     # Iterate over shifts along the column axis
-                    for t_col in range(0, d + 1):
+                    for t_col in range(0, d_col + 1):
                         col_dist_min = offset
                         col_dist_max = n_col - offset - t_col
 
@@ -1063,8 +1100,8 @@ def _fast_nl_means_denoising_4d(cnp.ndarray[np_floats, ndim=5] image,
 
     # Return cropped result, undoing padding
     return np.squeeze(
-        np.asarray(result[pad_size:-pad_size,
-                          pad_size:-pad_size,
-                          pad_size:-pad_size,
-                          pad_size:-pad_size, :], dtype=dtype)
+        np.asarray(result[pad_size_time:-pad_size_time,
+                          pad_size_pln:-pad_size_pln,
+                          pad_size_row:-pad_size_row,
+                          pad_size_col:-pad_size_col, :], dtype=dtype)
     )

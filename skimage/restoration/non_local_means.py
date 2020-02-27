@@ -151,6 +151,13 @@ def denoise_nl_means(image, patch_size=7, patch_distance=11, h=0.1,
         preserve_range = True
 
     image = convert_to_float(image, preserve_range)
+    
+    if np.isscalar(patch_distance):
+        patch_distance = [patch_distance, ] * ndim_no_channel
+    elif len(patch_distance) != ndim_no_channel:
+        raise ValueError(
+            "patch size must equal the number of non-channel dimensions")
+    patch_distance = np.asarray(patch_distance, dtype=np.intp)
 
     kwargs = dict(s=patch_size, d=patch_distance, h=h, var=sigma * sigma)
 
