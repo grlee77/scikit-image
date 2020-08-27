@@ -6,6 +6,7 @@ from libc.float cimport DBL_MAX
 
 import numpy as np
 cimport numpy as cnp
+from libc.math cimport ceil
 
 from ..util import regular_grid
 from .._shared.fused_numerics cimport np_floats
@@ -20,8 +21,10 @@ def _slic_cython(np_floats[:, :, :, ::1] image_zyx,
                  Py_ssize_t max_iter,
                  np_floats[::1] spacing,
                  bint slic_zero,
+                 np_floats[::1] search_window_scaling,
                  Py_ssize_t start_label=1,
-                 bint ignore_color=False):
+                 bint ignore_color=False,
+                 ):
     """Helper function for SLIC segmentation.
 
     Parameters
@@ -42,6 +45,12 @@ def _slic_cython(np_floats[:, :, :, ::1] image_zyx,
         k-means clustering.
     slic_zero : bool
         True to run SLIC-zero, False to run original SLIC.
+    search_window_scaling : 1D array of np_floats, shape (3,)
+        Used to scale the SLICE search window size. The orginal SLIC paper used
+        a scaling of 1, but scikit-image's implementation used a scaling of 2.
+        Larger values allow more anisotropic elements, but will increase
+        computation time. Computation will be proportional to
+        np.prod(search_window_scaling).
     start_label: int
         The label indexing start value.
     ignore_color : bool
@@ -112,9 +121,15 @@ def _slic_cython(np_floats[:, :, :, ::1] image_zyx,
     cdef np_floats dist_center, cx, cy, cz, dx, dy, dz, t
 
     cdef np_floats sz, sy, sx
+    cdef int rz, ry, rx
+
     sz = spacing[0]
     sy = spacing[1]
     sx = spacing[2]
+
+    rz = <int>ceil(search_window_scaling[0] * step_z)
+    ry = <int>ceil(search_window_scaling[1] * step_y)
+    rx = <int>ceil(search_window_scaling[2] * step_x)
 
     # The colors are scaled before being passed to _slic_cython so
     # max_color_sq can be initialised as all ones
@@ -138,12 +153,12 @@ def _slic_cython(np_floats[:, :, :, ::1] image_zyx,
                 cx = segments[k, 2]
 
                 # compute windows
-                z_min = <Py_ssize_t>max(cz - 2 * step_z, 0)
-                z_max = <Py_ssize_t>min(cz + 2 * step_z + 1, depth)
-                y_min = <Py_ssize_t>max(cy - 2 * step_y, 0)
-                y_max = <Py_ssize_t>min(cy + 2 * step_y + 1, height)
-                x_min = <Py_ssize_t>max(cx - 2 * step_x, 0)
-                x_max = <Py_ssize_t>min(cx + 2 * step_x + 1, width)
+                z_min = <Py_ssize_t>max(cz - rz, 0)
+                z_max = <Py_ssize_t>min(cz + rz + 1, depth)
+                y_min = <Py_ssize_t>max(cy - ry, 0)
+                y_max = <Py_ssize_t>min(cy + ry + 1, height)
+                x_min = <Py_ssize_t>max(cx - rx, 0)
+                x_max = <Py_ssize_t>min(cx + rx + 1, width)
 
                 for z in range(z_min, z_max):
                     dz = sz * (cz - z)

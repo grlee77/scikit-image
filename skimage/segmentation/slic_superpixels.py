@@ -309,13 +309,16 @@ def slic(image, n_segments=100, compactness=10., max_iter=10, sigma=0,
 
     if update_centroids:
         # Step 2 of the algorithm [3]_
+        scaling_init = np.full((3,), 0.8, dtype=dtype)
         _slic_cython(image, mask, segments, step, max_iter, spacing,
                      slic_zero, ignore_color=True,
+                     search_window_scaling=scaling_init,
                      start_label=start_label)
 
+    scaling = np.full((3,), 2.0, dtype=dtype)
     labels = _slic_cython(image, mask, segments, step, max_iter,
-                          spacing, slic_zero, ignore_color=False,
-                          start_label=start_label)
+                          spacing, slic_zero, search_window_scaling=scaling,
+                          ignore_color=False, start_label=start_label)
 
     if enforce_connectivity:
         if use_mask:
