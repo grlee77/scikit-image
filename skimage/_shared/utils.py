@@ -450,3 +450,26 @@ def _fix_ndimage_mode(mode):
     if NumpyVersion(scipy.__version__) >= '1.6.0':
         mode = grid_modes.get(mode, mode)
     return mode
+
+
+def _float_type(image):
+    """Return an appropriate floating-point dtype for a given image.
+
+    float32, float64, complex64, complex128 are preserved.
+    float16 is promoted to float32.
+    Other types are cast to float64.
+
+    Paramters
+    ---------
+    image : ndarray
+        Input image.
+
+    Retruns
+    -------
+    float_type : dtype
+        Floating-point dtype for the image.
+    """
+    if image.dtype.kind in 'bui':
+        # case all integer types to float64
+        return np.float64
+    return np.promote_types(image.dtype, np.float32)
