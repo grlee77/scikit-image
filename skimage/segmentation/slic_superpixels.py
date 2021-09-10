@@ -35,6 +35,7 @@ def _get_mask_centroids(mask, n_centroids, multichannel):
     # Get tight ROI around the mask to optimize
     coord = np.array(np.nonzero(mask), dtype=float).T
     # Fix random seed to ensure repeatability
+    # Keep old-style RandomState here as expected results in tests depend on it
     rnd = random.RandomState(123)
 
     # select n_centroids randomly distributed points from within the mask
@@ -243,7 +244,15 @@ def slic(image, n_segments=100, compactness=10., max_num_iter=10, sigma=0,
 
     image = img_as_float(image)
     float_dtype = utils._supported_float_type(image.dtype)
-    image = image.astype(float_dtype, copy=False)
+    # copy=True so subsequent in-place operations do not modify the function input
+    image = image.astype(float_dtype, copy=True)
+
+    # Rescale image to [0, 1] to make choice of compactness insensitive to
+    # input image scale.
+    image -= image.min()
+    imax = image.max()
+    if imax != 0:
+        image /= imax
 
     use_mask = mask is not None
     dtype = image.dtype

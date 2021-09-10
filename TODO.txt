@@ -37,6 +37,8 @@ Version 1.0
   clear_border(), and update the tests.
 * Remove the deprecation warning for `input` kwarg of the `label`
   function in `skimage/measure/_label.py`
+* Change the warning about poorly conditioned data to a ValueError within
+  `skimage.measure.CircleModel.estimate` and update the tests in `test_circle_model_insufficient_data` accordingly.
 
 Other (2022)
 ------------
@@ -46,6 +48,8 @@ Other (2022)
 * Remove unneeded `deconv_type` and astype call in `weiner` and
   `unsupervised_wiener` in `skimage.restoration.deconvolution` once the minimum
   supported version of ``scipy`` reaches 1.4.
+* Remove two unneeded astype calls in `butterworth` once the minimum supported
+  version of ``scipy`` reaches 1.4.
 * Remove pillow version related warning for CVE when pillow > 8.1.2 in
   `skimage/io/_plugins/pil_plugin.py` and `skimage/io/collection.py`.
 
