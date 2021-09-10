@@ -8,8 +8,9 @@ import numpy as np
 import scipy
 from numpy.lib import NumpyVersion
 
-from ..util import img_as_float
+from ..util.dtype import img_as_float
 from ._warnings import all_warnings, warn
+
 
 __all__ = ['deprecated', 'get_bound_method_class', 'all_warnings',
            'safe_as_int', 'check_shape_equality', 'check_nD', 'warn',
