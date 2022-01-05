@@ -9,7 +9,7 @@ from skimage.filters import rank
 from skimage.filters.rank import __all__ as all_rank_filters
 from skimage.filters.rank import subtract_mean
 from skimage.morphology import ball, disk, gray
-from skimage.util import img_as_float, img_as_ubyte
+from skimage.util import rescale_as_float, img_as_ubyte
 
 
 def test_otsu_edge_case():
@@ -354,7 +354,7 @@ class TestRank():
 
         # Create signed int8 image that and convert it to uint8
         image_uint = img_as_ubyte(data.camera()[:50, :50])
-        image_float = img_as_float(image_uint)
+        image_float = rescale_as_float(image_uint)
 
         methods = ['autolevel', 'equalize', 'gradient', 'threshold',
                    'subtract_mean', 'enhance_contrast', 'pop']
@@ -372,7 +372,7 @@ class TestRank():
         np.random.seed(0)
         volume_uint = np.random.randint(0, high=256,
                                         size=(10, 20, 30), dtype=np.uint8)
-        volume_float = img_as_float(volume_uint)
+        volume_float = rescale_as_float(volume_uint)
 
         methods_3d = ['equalize', 'otsu', 'autolevel', 'gradient',
                      'majority', 'maximum', 'mean', 'geometric_mean',

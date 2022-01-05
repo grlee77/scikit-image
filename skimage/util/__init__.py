@@ -3,7 +3,8 @@ import warnings
 import numpy as np
 from .dtype import (img_as_float32, img_as_float64, img_as_float,
                     img_as_int, img_as_uint, img_as_ubyte,
-                    img_as_bool, dtype_limits)
+                    img_as_bool, dtype_limits,
+                    rescale_as_float, rescale_as_float32, rescale_as_float64)
 from .shape import view_as_blocks, view_as_windows
 from .noise import random_noise
 from .apply_parallel import apply_parallel
@@ -25,6 +26,9 @@ __all__ = ['img_as_float32',
            'img_as_uint',
            'img_as_ubyte',
            'img_as_bool',
+           'rescale_as_float',
+           'rescale_as_float32',
+           'rescale_as_float64',
            'dtype_limits',
            'view_as_blocks',
            'view_as_windows',
