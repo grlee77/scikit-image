@@ -252,8 +252,7 @@ def test_multispectral_2d(dtype, channel_axis):
 
     data = np.moveaxis(data, -1, channel_axis)
     with expected_warnings(['"cg" mode' + '|' + SCIPY_RANK_WARNING,
-                            NUMPY_MATRIX_WARNING,
-                            'The probability range is outside']):
+                            NUMPY_MATRIX_WARNING]):
         multi_labels = random_walker(data, labels, mode='cg',
                                      channel_axis=channel_axis)
     data = np.moveaxis(data, channel_axis, -1)
@@ -275,8 +274,7 @@ def test_multispectral_2d_deprecated():
     # checking for multichannel kwarg warning
     with expected_warnings(['"cg" mode' + '|' + SCIPY_RANK_WARNING,
                            "`multichannel` is a deprecated argument",
-                            NUMPY_MATRIX_WARNING,
-                            'The probability range is outside']):
+                            NUMPY_MATRIX_WARNING]):
         multi_labels = random_walker(data, labels, mode='cg',
                                      multichannel=True)
     assert data[..., 0].shape == labels.shape
@@ -284,8 +282,7 @@ def test_multispectral_2d_deprecated():
     # checking for positional multichannel warning
     with expected_warnings(['"cg" mode' + '|' + SCIPY_RANK_WARNING,
                            "Providing the `multichannel` argument",
-                            NUMPY_MATRIX_WARNING,
-                            'The probability range is outside']):
+                            NUMPY_MATRIX_WARNING]):
         multi_labels = random_walker(data, labels, 130, 'cg', 1.e-3, True,
                                      True)
     assert data[..., 0].shape == labels.shape

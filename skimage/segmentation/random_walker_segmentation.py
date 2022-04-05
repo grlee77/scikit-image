@@ -12,7 +12,7 @@ import numpy as np
 from scipy import sparse, ndimage as ndi
 
 from .._shared import utils
-from .._shared.utils import warn
+from .._shared.utils import _supported_float_type, warn
 
 # executive summary for next code block: try to import umfpack from
 # scipy, but make sure not to raise a fuss if it fails since it's only
@@ -39,8 +39,6 @@ try:
     amg_loaded = True
 except ImportError:
     amg_loaded = False
-
-from ..util import rescale_as_float
 
 from scipy.sparse.linalg import cg, spsolve
 
@@ -456,16 +454,24 @@ def random_walker(data, labels, beta=130, mode='cg_j', tol=1.e-3, copy=True,
                              'dimension 2 or 3.')
         if data.shape != labels.shape:
             raise ValueError('Incompatible data and labels shapes.')
-        data = np.atleast_3d(rescale_as_float(data))[..., np.newaxis]
+        data = np.atleast_3d(data)[..., np.newaxis]
     else:
         if data.ndim not in (3, 4):
             raise ValueError('For multichannel input, data must have 3 or 4 '
                              'dimensions.')
         if data.shape[:-1] != labels.shape:
             raise ValueError('Incompatible data and labels shapes.')
-        data = rescale_as_float(data)
         if data.ndim == 3:  # 2D multispectral, needs singleton in 3rd axis
             data = data[:, :, np.newaxis, :]
+    float_dtype = _supported_float_type(data.dtype)
+    data = data.astype(float_dtype, copy=False)
+
+    # Rescale image to [0, 1] to make choice of beta and tolerances insensitive
+    # to input image scale.
+    data -= data.min()
+    imax = data.max()
+    if imax != 0:
+        data /= imax
 
     labels_shape = labels.shape
     labels_dtype = labels.dtype
