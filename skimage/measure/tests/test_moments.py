@@ -15,7 +15,7 @@ from skimage.measure import (centroid, inertia_tensor, inertia_tensor_eigvals,
 
 @pytest.mark.parametrize('anisotropic', [False, True, None])
 def test_moments(anisotropic):
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[14, 14] = 1
     image[15, 15] = 1
     image[14, 15] = 0.5
@@ -35,7 +35,7 @@ def test_moments(anisotropic):
 
 @pytest.mark.parametrize('anisotropic', [False, True, None])
 def test_moments_central(anisotropic):
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[14, 14] = 1
     image[15, 15] = 1
     image[14, 15] = 0.5
@@ -57,7 +57,7 @@ def test_moments_central(anisotropic):
     assert_allclose(mu, mu_calc_centroid, rtol=1e-14)
 
     # shift image by dx=2, dy=2
-    image2 = np.zeros((20, 20), dtype=np.double)
+    image2 = np.zeros((20, 20), dtype=np.float64)
     image2[16, 16] = 1
     image2[17, 17] = 1
     image2[16, 17] = 0.5
@@ -75,12 +75,12 @@ def test_moments_central(anisotropic):
 
 
 def test_moments_coords():
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[13:17, 13:17] = 1
     mu_image = moments(image)
 
     coords = np.array([[r, c] for r in range(13, 17)
-                       for c in range(13, 17)], dtype=np.double)
+                       for c in range(13, 17)], dtype=np.float64)
     mu_coords = moments_coords(coords)
     assert_almost_equal(mu_coords, mu_image)
 
@@ -103,12 +103,12 @@ def test_moments_coords_dtype(dtype):
 
 
 def test_moments_central_coords():
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[13:17, 13:17] = 1
     mu_image = moments_central(image, (14.5, 14.5))
 
     coords = np.array([[r, c] for r in range(13, 17)
-                       for c in range(13, 17)], dtype=np.double)
+                       for c in range(13, 17)], dtype=np.float64)
     mu_coords = moments_coords_central(coords, (14.5, 14.5))
     assert_almost_equal(mu_coords, mu_image)
 
@@ -117,23 +117,23 @@ def test_moments_central_coords():
     assert_almost_equal(mu_coords_calc_centroid, mu_coords)
 
     # shift image by dx=3 dy=3
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[16:20, 16:20] = 1
     mu_image = moments_central(image, (14.5, 14.5))
 
     coords = np.array([[r, c] for r in range(16, 20)
-                       for c in range(16, 20)], dtype=np.double)
+                       for c in range(16, 20)], dtype=np.float64)
     mu_coords = moments_coords_central(coords, (14.5, 14.5))
     assert_almost_equal(mu_coords, mu_image)
 
 
 def test_moments_normalized():
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[13:17, 13:17] = 1
     mu = moments_central(image, (14.5, 14.5))
     nu = moments_normalized(mu)
     # shift image by dx=-2, dy=-2 and scale non-zero extent by 0.5
-    image2 = np.zeros((20, 20), dtype=np.double)
+    image2 = np.zeros((20, 20), dtype=np.float64)
     # scale amplitude by 0.7
     image2[11:13, 11:13] = 0.7
     mu2 = moments_central(image2, (11.5, 11.5))
@@ -144,7 +144,7 @@ def test_moments_normalized():
 
 @pytest.mark.parametrize('anisotropic', [False, True])
 def test_moments_normalized_spacing(anisotropic):
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[13:17, 13:17] = 1
 
     if not anisotropic:
@@ -184,13 +184,13 @@ def test_moments_normalized_invalid():
 
 
 def test_moments_hu():
-    image = np.zeros((20, 20), dtype=np.double)
+    image = np.zeros((20, 20), dtype=np.float64)
     image[13:15, 13:17] = 1
     mu = moments_central(image, (13.5, 14.5))
     nu = moments_normalized(mu)
     hu = moments_hu(nu)
     # shift image by dx=2, dy=3, scale by 0.5 and rotate by 90deg
-    image2 = np.zeros((20, 20), dtype=np.double)
+    image2 = np.zeros((20, 20), dtype=np.float64)
     image2[11, 11:13] = 1
     image2 = image2.T
     mu2 = moments_central(image2, (11.5, 11))
