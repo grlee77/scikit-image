@@ -226,10 +226,16 @@ jobs:
           SET PATH="C:\\Program Files\\LLVM\\bin;%PATH%"
           SET PATH="C:\\Program Files (x86)\\LLVM\\bin;%PATH%"
 
+      - name: add path to rc.exe
+        run: |
+          SET PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\\x86\rc.exe;%PATH%"
+
       - name: Build Windows wheels for CPython 3.10
         # NumPy dropped x86 wheels for Python 3.10
         if: matrix.cibw_arch == 'AMD64'
-        #  add rc.exe to path
+        # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
+        # we explicitly add rc.exe to path using the method from:
+        # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
         run: |
           function Invoke-VSDevEnvironment {
             $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -251,6 +257,9 @@ jobs:
           LDFLAGS: "-Wl,-S"
 
       - name: Build Windows wheels for CPython
+        # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
+        # we explicitly add rc.exe to path using the method from:
+        # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
         run: |
           function Invoke-VSDevEnvironment {
             $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
