@@ -191,6 +191,7 @@ jobs:
       matrix:
         os: [windows-latest]
         cibw_arch: ["AMD64"]
+        cibw_python: "cp3?-* cp310-*"
 
     steps:
       - uses: actions/checkout@v2
@@ -222,6 +223,7 @@ jobs:
         # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
         # we explicitly add rc.exe to path using the method from:
         # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
+        # with additional -arch=arm64 flag to vsdevcmd.bat
         run: |
           function Invoke-VSDevEnvironment {
             $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -237,7 +239,7 @@ jobs:
           Get-Command rc.exe | Format-Table -AutoSize
           python -m cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: "cp3?-*"
+          CIBW_BUILD: ${{ matrix.cibw_python }}
           CIBW_SKIP: "cp36-*"
           CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
           # -Wl,-S equivalent to gcc's -Wl,--strip-debug
@@ -256,6 +258,7 @@ jobs:
       matrix:
         os: [windows-latest]
         cibw_arch: ["x86"]
+        cibw_python: "cp3?-*"
 
     steps:
       - uses: actions/checkout@v2
@@ -287,6 +290,7 @@ jobs:
         # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
         # we explicitly add rc.exe to path using the method from:
         # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
+        # with additional -arch=x86 flag to vsdevcmd.bat
         run: |
           function Invoke-VSDevEnvironment {
             $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -302,7 +306,7 @@ jobs:
           Get-Command rc.exe | Format-Table -AutoSize
           python -m cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: "cp3?-* cp310-*"
+          CIBW_BUILD: ${{ matrix.cibw_python }}
           CIBW_SKIP: "cp36-*"
           CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
           # -Wl,-S equivalent to gcc's -Wl,--strip-debug
