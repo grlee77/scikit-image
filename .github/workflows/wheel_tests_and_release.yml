@@ -183,14 +183,107 @@ jobs:
   #         name: wheels
   #         path: ./dist/*.whl
 
-  build_windows_wheels:
+  build_windows_wheels_amd64:
     name: Build ${{ matrix.cibw_arch }} wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        cibw_arch: ["AMD64", "x86"]
+        cibw_arch: ["AMD64"]
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v2
+        name: Install Python
+        with:
+          python-version: '3.7'
+
+      # install choco package manager
+      - uses: crazy-max/ghaction-chocolatey@v1
+        name: Install chocolatey
+        with:
+          args: -h
+
+      # install clang-cl (needed for Pythran)
+      - name: Install clang-cl
+        run: |
+          choco install --force llvm
+
+      - name: Install cibuildwheel and add clang-cl to path
+        run: |
+          python -m pip install cibuildwheel
+          SET PATH="C:\\Program Files\\LLVM\\bin;%PATH%"
+
+      - name: add path to rc.exe (amd64)
+        run: |
+          SET PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\\x64\rc.exe;%PATH%"
+
+      - name: Build Windows wheels for CPython 3.10
+        # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
+        # we explicitly add rc.exe to path using the method from:
+        # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
+        run: |
+          function Invoke-VSDevEnvironment {
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+              $installationPath = & $vswhere -prerelease -legacy -latest -property installationPath
+              $Command = Join-Path $installationPath "Common7\Tools\vsdevcmd.bat"
+            & "${env:COMSPEC}" /s /c "`"$Command`" -arch=amd64 -no_logo && set" | Foreach-Object {
+                  if ($_ -match '^([^=]+)=(.*)') {
+                      [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
+                  }
+              }
+          }
+          Invoke-VSDevEnvironment
+          Get-Command rc.exe | Format-Table -AutoSize
+          python -m cibuildwheel --output-dir dist
+        env:
+          CIBW_BUILD: "cp310-*"
+          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
+          # -Wl,-S equivalent to gcc's -Wl,--strip-debug
+          LDFLAGS: "-Wl,-S"
+
+      - name: Build Windows wheels for CPython
+        # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
+        # we explicitly add rc.exe to path using the method from:
+        # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
+        run: |
+          function Invoke-VSDevEnvironment {
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+              $installationPath = & $vswhere -prerelease -legacy -latest -property installationPath
+              $Command = Join-Path $installationPath "Common7\Tools\vsdevcmd.bat"
+            & "${env:COMSPEC}" /s /c "`"$Command`" -arch=amd64 -no_logo && set" | Foreach-Object {
+                  if ($_ -match '^([^=]+)=(.*)') {
+                      [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
+                  }
+              }
+          }
+          Invoke-VSDevEnvironment
+          Get-Command rc.exe | Format-Table -AutoSize
+          python -m cibuildwheel --output-dir dist
+        env:
+          CIBW_BUILD: "cp3?-*"
+          CIBW_SKIP: "cp36-*"
+          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
+          # -Wl,-S equivalent to gcc's -Wl,--strip-debug
+          LDFLAGS: "-Wl,-S"
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: ./dist/*.whl
+
+  build_windows_wheels_x86:
+    name: Build ${{ matrix.cibw_arch }} wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        cibw_arch: ["x86"]
 
     steps:
       - uses: actions/checkout@v2
@@ -210,20 +303,12 @@ jobs:
 
       # install x86 clang-cl (needed for Pythran)
       - name: Install x86 clang-cl
-        if: matrix.cibw_arch == 'x86'
         run: |
           choco install --force --x86 llvm
-
-      # install clang-cl (needed for Pythran)
-      - name: Install clang-cl
-        if: matrix.cibw_arch == 'AMD64'
-        run: |
-          choco install --force llvm
 
       - name: Install cibuildwheel and add clang-cl to path
         run: |
           python -m pip install cibuildwheel
-          SET PATH="C:\\Program Files\\LLVM\\bin;%PATH%"
           SET PATH="C:\\Program Files (x86)\\LLVM\\bin;%PATH%"
 
       - name: add path to rc.exe (x86)
@@ -231,55 +316,22 @@ jobs:
         run: |
           SET PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\\x86\rc.exe;%PATH%"
 
-      - name: add path to rc.exe (amd64)
-        if: matrix.cibw_arch == 'AMD64'
-        run: |
-          SET PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\\x64\rc.exe;%PATH%"
-
-      - name: Build Windows wheels for CPython 3.10
-        # NumPy dropped x86 wheels for Python 3.10
-        if: matrix.cibw_arch == 'AMD64'
-        # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
-        # we explicitly add rc.exe to path using the method from:
-        # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
-        # run: |
-        #   function Invoke-VSDevEnvironment {
-        #     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-        #       $installationPath = & $vswhere -prerelease -legacy -latest -property installationPath
-        #       $Command = Join-Path $installationPath "Common7\Tools\vsdevcmd.bat"
-        #     & "${env:COMSPEC}" /s /c "`"$Command`" -arch=amd64 -no_logo && set" | Foreach-Object {
-        #           if ($_ -match '^([^=]+)=(.*)') {
-        #               [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
-        #           }
-        #       }
-        #   }
-        #   Invoke-VSDevEnvironment
-        #   SET PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\\x64\rc.exe;%PATH%"
-        run: |
-          Get-Command rc.exe | Format-Table -AutoSize
-          python -m cibuildwheel --output-dir dist
-        env:
-          CIBW_BUILD: "cp310-*"
-          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
-          # -Wl,-S equivalent to gcc's -Wl,--strip-debug
-          LDFLAGS: "-Wl,-S"
-
       - name: Build Windows wheels for CPython
         # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
         # we explicitly add rc.exe to path using the method from:
         # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
-          # function Invoke-VSDevEnvironment {
-          #   $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          #     $installationPath = & $vswhere -prerelease -legacy -latest -property installationPath
-          #     $Command = Join-Path $installationPath "Common7\Tools\vsdevcmd.bat"
-          #   & "${env:COMSPEC}" /s /c "`"$Command`" -arch=$Env:CIBW_ARCHS_WINDOWS -no_logo && set" | Foreach-Object {
-          #         if ($_ -match '^([^=]+)=(.*)') {
-          #             [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
-          #         }
-          #     }
-          # }
-          # Invoke-VSDevEnvironment
         run: |
+          function Invoke-VSDevEnvironment {
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+              $installationPath = & $vswhere -prerelease -legacy -latest -property installationPath
+              $Command = Join-Path $installationPath "Common7\Tools\vsdevcmd.bat"
+            & "${env:COMSPEC}" /s /c "`"$Command`" -arch=x86 -no_logo && set" | Foreach-Object {
+                  if ($_ -match '^([^=]+)=(.*)') {
+                      [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
+                  }
+              }
+          }
+          Invoke-VSDevEnvironment
           Get-Command rc.exe | Format-Table -AutoSize
           python -m cibuildwheel --output-dir dist
         env:
