@@ -218,34 +218,6 @@ jobs:
           python -m pip install cibuildwheel
           SET PATH="C:\\Program Files\\LLVM\\bin;%PATH%"
 
-      - name: add path to rc.exe (amd64)
-        run: |
-          SET PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\\x64\rc.exe;%PATH%"
-
-      - name: Build Windows wheels for CPython 3.10
-        # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
-        # we explicitly add rc.exe to path using the method from:
-        # https://github.com/actions/virtual-environments/issues/294#issuecomment-588090582
-        run: |
-          function Invoke-VSDevEnvironment {
-            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-              $installationPath = & $vswhere -prerelease -legacy -latest -property installationPath
-              $Command = Join-Path $installationPath "Common7\Tools\vsdevcmd.bat"
-            & "${env:COMSPEC}" /s /c "`"$Command`" -arch=amd64 -no_logo && set" | Foreach-Object {
-                  if ($_ -match '^([^=]+)=(.*)') {
-                      [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
-                  }
-              }
-          }
-          Invoke-VSDevEnvironment
-          Get-Command rc.exe | Format-Table -AutoSize
-          python -m cibuildwheel --output-dir dist
-        env:
-          CIBW_BUILD: "cp310-*"
-          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
-          # -Wl,-S equivalent to gcc's -Wl,--strip-debug
-          LDFLAGS: "-Wl,-S"
-
       - name: Build Windows wheels for CPython
         # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
         # we explicitly add rc.exe to path using the method from:
@@ -265,7 +237,7 @@ jobs:
           Get-Command rc.exe | Format-Table -AutoSize
           python -m cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: "cp3?-*"
+          CIBW_BUILD: "cp3?-* cp310-*"
           CIBW_SKIP: "cp36-*"
           CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
           # -Wl,-S equivalent to gcc's -Wl,--strip-debug
@@ -311,11 +283,6 @@ jobs:
           python -m pip install cibuildwheel
           SET PATH="C:\\Program Files (x86)\\LLVM\\bin;%PATH%"
 
-      - name: add path to rc.exe (x86)
-        if: matrix.cibw_arch == 'x86'
-        run: |
-          SET PATH="C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\\x86\rc.exe;%PATH%"
-
       - name: Build Windows wheels for CPython
         # To avoid "LINK : fatal error LNK1158: cannot run 'rc.exe'"
         # we explicitly add rc.exe to path using the method from:
@@ -335,7 +302,7 @@ jobs:
           Get-Command rc.exe | Format-Table -AutoSize
           python -m cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: "cp3?-*"
+          CIBW_BUILD: "cp3?-* cp310-*"
           CIBW_SKIP: "cp36-*"
           CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
           # -Wl,-S equivalent to gcc's -Wl,--strip-debug
