@@ -212,7 +212,11 @@ jobs:
       # install clang-cl (needed for Pythran)
       - name: Install clang-cl
         run: |
-          choco install --force llvm
+          if ("${env:CIBW_ARCHS_WINDOWS}" -eq "AMD64") {
+            choco install --force llvm
+          } else {
+            choco install --force --x86 llvm
+          }
 
       - name: Install cibuildwheel and add clang-cl to path
         run: |
