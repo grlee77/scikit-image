@@ -191,7 +191,7 @@ jobs:
       matrix:
         os: [windows-latest]
         cibw_arch: ["AMD64"]
-        cibw_python: [ "cp3?-*", "cp310-*"]
+        cibw_python: ["cp37-*", "cp38-*", "cp39-*", "cp310-*"]
 
     steps:
       - uses: actions/checkout@v2
@@ -258,7 +258,7 @@ jobs:
       matrix:
         os: [windows-latest]
         cibw_arch: ["x86"]
-        cibw_python: [ "cp3?-*"]  # omit python 3.10 for x86
+        cibw_python: ["cp37-*", "cp38-*", "cp39-*"]
 
     steps:
       - uses: actions/checkout@v2
