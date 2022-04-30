@@ -237,7 +237,7 @@ jobs:
           Get-Command rc.exe | Format-Table -AutoSize
           python -m cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: "cp3?-* cp310-*"
+          CIBW_BUILD: "cp3?-*"
           CIBW_SKIP: "cp36-*"
           CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
           # -Wl,-S equivalent to gcc's -Wl,--strip-debug
