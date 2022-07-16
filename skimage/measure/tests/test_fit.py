@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from skimage._shared import testing
 from skimage._shared._warnings import expected_warnings
@@ -308,7 +307,8 @@ def test_ransac_geometric():
     dst[outliers[2]] = (50, 50)
 
     # estimate parameters of corrupted data
-    model_est, inliers = ransac((src, dst), AffineTransform, 2, 20)
+    model_est, inliers = ransac((src, dst), AffineTransform, 2, 20,
+                                random_state=random_state)
 
     # test whether estimated parameters equal original parameters
     assert_almost_equal(model0.params, model_est.params)
@@ -343,28 +343,37 @@ def test_ransac_dynamic_max_trials():
 
     # e = 0%, min_samples = X
     assert_equal(_dynamic_max_trials(100, 100, 2, 0.99), 1)
+    assert_equal(_dynamic_max_trials(100, 100, 2, 1), 1)
 
     # e = 5%, min_samples = 2
     assert_equal(_dynamic_max_trials(95, 100, 2, 0.99), 2)
+    assert_equal(_dynamic_max_trials(95, 100, 2, 1), 16)
     # e = 10%, min_samples = 2
     assert_equal(_dynamic_max_trials(90, 100, 2, 0.99), 3)
+    assert_equal(_dynamic_max_trials(90, 100, 2, 1), 22)
     # e = 30%, min_samples = 2
     assert_equal(_dynamic_max_trials(70, 100, 2, 0.99), 7)
+    assert_equal(_dynamic_max_trials(70, 100, 2, 1), 54)
     # e = 50%, min_samples = 2
     assert_equal(_dynamic_max_trials(50, 100, 2, 0.99), 17)
+    assert_equal(_dynamic_max_trials(50, 100, 2, 1), 126)
 
     # e = 5%, min_samples = 8
     assert_equal(_dynamic_max_trials(95, 100, 8, 0.99), 5)
+    assert_equal(_dynamic_max_trials(95, 100, 8, 1), 34)
     # e = 10%, min_samples = 8
     assert_equal(_dynamic_max_trials(90, 100, 8, 0.99), 9)
+    assert_equal(_dynamic_max_trials(90, 100, 8, 1), 65)
     # e = 30%, min_samples = 8
     assert_equal(_dynamic_max_trials(70, 100, 8, 0.99), 78)
+    assert_equal(_dynamic_max_trials(70, 100, 8, 1), 608)
     # e = 50%, min_samples = 8
     assert_equal(_dynamic_max_trials(50, 100, 8, 0.99), 1177)
+    assert_equal(_dynamic_max_trials(50, 100, 8, 1), 9210)
 
     # e = 0%, min_samples = 5
     assert_equal(_dynamic_max_trials(1, 100, 5, 0), 0)
-    assert_equal(_dynamic_max_trials(1, 100, 5, 1), np.inf)
+    assert_equal(_dynamic_max_trials(1, 100, 5, 1), 360436504051)
 
 
 def test_ransac_invalid_input():
@@ -409,7 +418,7 @@ def test_ransac_sample_duplicates():
             return True
 
         def residuals(self, data):
-            return np.ones(len(data), dtype=np.double)
+            return np.ones(len(data), dtype=np.float64)
 
     # Create dataset with four unique points. Force 10 iterations
     # and check that there are no duplicated data points.
@@ -426,3 +435,20 @@ def test_ransac_with_no_final_inliers():
                                 residual_threshold=0, random_state=1523427)
     assert inliers is None
     assert model is None
+
+
+def test_ransac_non_valid_best_model():
+    """Example from GH issue #5572"""
+    def is_model_valid(model, *random_data) -> bool:
+        """Allow models with a maximum of 10 degree tilt from the vertical
+
+        """
+        tilt = abs(np.arccos(np.dot(model.params[1], [0, 0, 1])))
+        return tilt <= (10 / 180 * np.pi)
+
+    rnd = np.random.RandomState(1)
+    data = np.linspace([0, 0, 0], [0.3, 0, 1], 1000) + rnd.rand(1000, 3) - 0.5
+    with expected_warnings(["Estimated model is not valid"]):
+        ransac(data, LineModelND, min_samples=2,
+               residual_threshold=0.3, max_trials=50, random_state=0,
+               is_model_valid=is_model_valid)

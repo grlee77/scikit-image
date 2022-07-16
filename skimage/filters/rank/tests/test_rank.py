@@ -4,8 +4,7 @@ import pytest
 from skimage import data, morphology, util
 from skimage._shared._warnings import expected_warnings
 from skimage._shared.testing import (assert_allclose, assert_array_almost_equal,
-                                     assert_array_equal, assert_equal, fetch,
-                                     test_parallel)
+                                     assert_equal, fetch, test_parallel)
 from skimage.filters import rank
 from skimage.filters.rank import __all__ as all_rank_filters
 from skimage.filters.rank import subtract_mean
@@ -111,11 +110,20 @@ class TestRank():
                 assert_array_almost_equal(expected, result)
             else:
                 if outdt is not None:
-                    # Avoid rounding issues comparing to expected result
-                    result = result.astype(expected.dtype)
+                    # Avoid rounding issues comparing to expected result.
+                    # Take modulus first to avoid undefined behavior for
+                    # float->uint8 conversions.
+                    result = np.mod(result, 256.0).astype(expected.dtype)
                 assert_array_almost_equal(expected, result)
 
         check()
+
+    @pytest.mark.parametrize('filter', all_rank_filters)
+    def test_rank_filter_footprint_sequence_unsupported(self, filter):
+        footprint_sequence = morphology.diamond(3, decomposition="sequence")
+        with pytest.raises(ValueError):
+            getattr(rank, filter)(self.image.astype(np.uint8),
+                                  footprint_sequence)
 
     @pytest.mark.parametrize('filter', all_rank_filters)
     def test_rank_filter_selem_kwarg_deprecation(self, filter):
@@ -148,7 +156,9 @@ class TestRank():
                     datadt = np.uint8
                 else:
                     datadt = expected.dtype
-                result = result.astype(datadt)
+                # Take modulus first to avoid undefined behavior for
+                # float->uint8 conversions.
+                result = np.mod(result, 256.0).astype(datadt)
             assert_array_almost_equal(expected, result)
 
         check()
@@ -635,7 +645,7 @@ class TestRank():
         # make sure output is of dtype double
         with expected_warnings(['Bad rank filter performance']):
             out = rank.entropy(data, np.ones((16, 16), dtype=np.uint8))
-        assert out.dtype == np.double
+        assert out.dtype == np.float64
 
     def test_footprint_dtypes(self):
 

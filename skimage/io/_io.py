@@ -18,7 +18,7 @@ def imread(fname, as_gray=False, plugin=None, **plugin_args):
 
     Parameters
     ----------
-    fname : string
+    fname : str or pathlib.Path
         Image file name, e.g. ``test.jpg`` or URL.
     as_gray : bool, optional
         If True, convert color images to gray-scale (64-bit floats).
@@ -103,7 +103,7 @@ def imsave(fname, arr, plugin=None, check_contrast=True, **plugin_args):
 
     Parameters
     ----------
-    fname : str
+    fname : str or pathlib.Path
         Target filename.
     arr : ndarray of shape (M,N) or (M,N,3) or (M,N,4)
         Image data.
@@ -128,6 +128,8 @@ def imsave(fname, arr, plugin=None, check_contrast=True, **plugin_args):
     and largest file size (default 75).  This is only available when using
     the PIL and imageio plugins.
     """
+    if isinstance(fname, pathlib.Path):
+        fname = str(fname.resolve())
     if plugin is None and hasattr(fname, 'lower'):
         if fname.lower().endswith(('.tiff', '.tif')):
             plugin = 'tifffile'

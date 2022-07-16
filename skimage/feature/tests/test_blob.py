@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_almost_equal
 
+from skimage import feature
 from skimage.draw import disk
 from skimage.draw.draw3d import ellipsoid
 from skimage.feature import blob_dog, blob_doh, blob_log
@@ -169,6 +170,23 @@ def test_blob_dog_excl_border():
     assert blobs.shape[0] == 0, msg
 
 
+@pytest.mark.parametrize('anisotropic', [False, True])
+@pytest.mark.parametrize('ndim', [1, 2, 3, 4])
+@pytest.mark.parametrize('function_name', ['blob_dog', 'blob_log'])
+def test_nd_blob_no_peaks_shape(function_name, ndim, anisotropic):
+    # uniform image so no blobs will be found
+    z = np.zeros((16,) * ndim, dtype=np.float32)
+    if anisotropic:
+        max_sigma = 8 + np.arange(ndim)
+    else:
+        max_sigma = 8
+    blob_func = getattr(feature, function_name)
+    blobs = blob_func(z, max_sigma=max_sigma)
+    # z.ndim +  (z.ndim sigmas if anisotropic, only one sigma otherwise)
+    expected_shape = 2 * z.ndim if anisotropic else z.ndim + 1
+    assert blobs.shape == (0, expected_shape)
+
+
 @pytest.mark.parametrize(
     'dtype', [np.uint8, np.float16, np.float32, np.float64]
 )
@@ -269,9 +287,7 @@ def test_blob_log_no_warnings():
     xs, ys = disk((7, 6), 2)
     img[xs, ys] = 255
 
-    with pytest.warns(None) as records:
-        blob_log(img, max_sigma=20, num_sigma=10, threshold=.1)
-    assert len(records) == 0
+    blob_log(img, max_sigma=20, num_sigma=10, threshold=.1)
 
 
 def test_blob_log_3d():
