@@ -171,7 +171,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        cibw_arch: ["AMD64", "x86"]
+        cibw_arch: ["AMD64"]
         cibw_python: ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
 
     steps:
@@ -257,6 +257,9 @@ jobs:
           Get-Command rc.exe | Format-Table -AutoSize
           python -m cibuildwheel --output-dir dist
         env:
+          # define CC, CXX so meson will use clang-cl instead of MSVC
+          CC: clang-cl
+          CXX: clang-cl
           CIBW_BUILD: ${{ matrix.cibw_python }}
           CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_arch }}
           # -Wl,-S equivalent to gcc's -Wl,--strip-debug
